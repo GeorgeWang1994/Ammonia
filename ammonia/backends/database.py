@@ -9,10 +9,13 @@
 @desc:      提供获取任务信息的基础调用函数
 """
 
+import pickle
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, exc
 
 from ammonia.backends import settings
+from ammonia import settings as global_settings
 from .models import Task, TaskStatusChoice
 
 
@@ -21,8 +24,8 @@ class DbBackend(object):
     利用数据库实现消息持久化
     """
     def __init__(self, backend_url=settings.BACKEND_URL, encoding=settings.BACKEND_ENCODING):
-        engine = create_engine(backend_url, encoding=encoding)
-        db_session = sessionmaker(bind=engine)
+        self.engine = create_engine(backend_url, encoding=encoding, echo=global_settings.DEBUG)
+        db_session = sessionmaker(bind=self.engine)
         self.session = db_session()
 
     def get_task(self, task_id):
@@ -35,7 +38,7 @@ class DbBackend(object):
         if not status:
             return []
 
-        if status not in TaskStatusChoice.value:
+        if status not in TaskStatusChoice:
             return []
 
         return self.session.query(Task).filter(Task.status == status).all()
@@ -46,18 +49,21 @@ class DbBackend(object):
 
         return self.session.query(Task).filter(Task.task_id.in_([task_id_list])).all()
 
-    def insert_task(self, status=TaskStatusChoice.START, result=""):
-        if status not in TaskStatusChoice.value:
+    def insert_task(self, task_id, status=TaskStatusChoice.START, result="", traceback=""):
+        if status not in TaskStatusChoice:
             return False
 
-        self.session.add(Task(status=status, result=result))
+        import json
+        _traceback = json.dumps(traceback) if traceback else ""
+        self.session.add(Task(task_id=task_id, status=status, result=result, _traceback=_traceback))
+        self.session.commit()
         return True
 
     def update_task_status(self, task_id, status):
         if not task_id:
             return False
 
-        if status not in TaskStatusChoice.value:
+        if status not in TaskStatusChoice:
             return False
 
         task = self.get_task(task_id)
@@ -69,7 +75,7 @@ class DbBackend(object):
         return True
 
     def get_error_tasks(self):
-        return self.session.query(Task).filter(Task._traceback.isnot(None)).all()
+        return self.session.query(Task).filter(Task._traceback != "").all()
 
     def del_task(self, task_id):
         task = self.get_task(task_id)

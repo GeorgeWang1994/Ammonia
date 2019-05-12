@@ -9,10 +9,11 @@
 @desc:      表存储
 """
 
+import datetime
 import pickle
 from enum import Enum
 
-from sqlalchemy import Column, VARCHAR, BIGINT, TEXT, Enum as Sql_Enum
+from sqlalchemy import Column, String, TEXT, Enum as Sql_Enum, DATETIME
 from sqlalchemy.ext.declarative import declarative_base
 
 from ammonia.exception import SerializeException
@@ -29,11 +30,13 @@ class TaskStatusChoice(Enum):
 class Task(BASE):
     __tablename__ = "task"
 
-    task_id = Column(BIGINT, primary_key=True, autoincrement=True, comment=u"任务id")
+    task_id = Column(String(50), primary_key=True, comment=u"任务id")
     status = Column(Sql_Enum(TaskStatusChoice), comment=u"任务当前的状态", nullable=False,
                     default=TaskStatusChoice.START)
-    result = Column(VARCHAR(200), comment=u"任务执行的结果", default="")
+    result = Column(String(200), comment=u"任务执行的结果", default="")
     _traceback = Column(TEXT, comment=u"报错信息", default="")
+    create_time = Column(DATETIME, comment=u"创建时间", default=datetime.datetime.now(), nullable=False)
+    modified_time = Column(DATETIME, comment=u"修改时间", default=datetime.datetime.now(), nullable=False)
 
     def __repr__(self):
         return "task:%s|%s" % (self.task_id, self.status)
