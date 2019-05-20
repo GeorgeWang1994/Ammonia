@@ -3,8 +3,10 @@
 
 """
 @author:    george wang
-@datetime:  2019-05-11
-@file:      exception.py
+@datetime:  2019-05-19
+@file:      __init__.py.py
 @contact:   georgewang1994@163.com
-@desc:      错误
+@desc:      ...
 """
+
+
