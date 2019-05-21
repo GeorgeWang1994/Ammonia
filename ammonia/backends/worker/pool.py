@@ -10,36 +10,75 @@
 """
 
 import asyncio
+import functools
+
+
+class Terminal(object):
+    pass
 
 
 class AsyncPool(object):
     """
     协程池
     """
-    def __init__(self, worker_count):
+    def __init__(self, worker_count, loop=None):
         self.worker_count = worker_count
-        self.loop = asyncio.get_event_loop()
+        self.loop = loop if loop else asyncio.get_event_loop()
         self.queue = asyncio.Queue(maxsize=self.worker_count)
         self._workers = []
 
     def start(self):
-        self._workers = [asyncio.ensure_future(self._worker_loop(), loop=self.loop) for _ in range(self.worker_count)]
+        self._workers = [asyncio.ensure_future(self._worker(), loop=self.loop) for _ in range(self.worker_count)]
 
-    def close(self):
-        self.loop.close()
-        del self.loop
-        del self.queue
+    async def __aenter__(self):
+        self.start()
+        return self
 
-    def _worker_loop(self):
-        pass
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.join()
 
-    def apply_async(self, executor_func, success_callback=None, error_callback=None, *args, **kwargs):
+    async def stop(self):
+        await self.join()
+        self.loop.stop()
+        self.loop = None
+
+    async def join(self):
+        if not self._workers:
+            return
+
+        for _ in range(self.worker_count):
+            await self.queue.put(Terminal())
+
+        await asyncio.gather(*self._workers, loop=self.loop)
+        self._workers = []
+
+    async def _worker(self):
+        while True:
+            item = await self.queue.get()
+            if isinstance(item, Terminal):
+                break
+
+            future, executor_func, args, kwargs = item
+            try:
+                return_value = executor_func(*args, **kwargs)
+                future.set_result(return_value)
+            except (KeyboardInterrupt, MemoryError, SystemExit) as e:
+                future.set_exception(e)
+                raise
+            finally:
+                self.queue.task_done()
+
+    async def apply_async(self, executor_func, success_callback=None, error_callback=None, *args, **kwargs):
         future = asyncio.futures.Future(loop=self.loop)
-        future.add_done_callback(self.on_receive)
-        await self.queue.put((future, args, kwargs))
-
+        future.add_done_callback(functools.partial(self.on_receive, success_callback, error_callback))
+        await self.queue.put((future, executor_func, args, kwargs))
         return future
 
-    def on_receive(self, success_callback=None, error_callback=None):
-        pass
+    def on_receive(self, success_callback, error_callback, future):
+        result_value = future.result()
 
+        if success_callback:
+            success_callback(result_value)
+
+        if error_callback:
+            error_callback(result_value)
