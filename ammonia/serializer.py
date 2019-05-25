@@ -25,3 +25,6 @@ class Serializer(object):
 
     def loads(self, data):
         return self._serializer.loads(zlib.decompress(data))
+
+
+serializer = Serializer()

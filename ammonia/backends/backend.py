@@ -4,7 +4,7 @@
 """
 @author:    george wang
 @datetime:  2019-05-11
-@file:      mq.py
+@file:      backend.py
 @contact:   georgewang1994@163.com
 @desc:      RabbitMq的持久化，其是通过设置参数durable=True实现的
 """
@@ -13,7 +13,7 @@ import pickle
 
 from kombu import Connection, Queue, Exchange, Producer, Consumer
 
-from ammonia.backends import settings
+from ammonia import settings
 
 # 队列名字
 QUEUE_NAME = "backend_queue"
@@ -22,15 +22,7 @@ QUEUE_NAME = "backend_queue"
 EXCHANGE_NAME = "backend_exchange"
 
 
-# class MqConsumer(Consumer):
-#     def
-#
-#
-# class MqProducer(Producer):
-#     pass
-
-
-class MqBackend(object):
+class MQBackend(object):
     """
     利用mq自身功能实现消息持久化
     """

@@ -9,13 +9,10 @@
 @desc:      提供获取任务信息的基础调用函数
 """
 
-import pickle
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, exc
 
-from ammonia.backends import settings
-from ammonia import settings as global_settings
+from ammonia import settings
 from .models import Task, TaskStatusChoice
 
 
@@ -24,7 +21,7 @@ class DbBackend(object):
     利用数据库实现消息持久化
     """
     def __init__(self, backend_url=settings.BACKEND_URL, encoding=settings.BACKEND_ENCODING):
-        self.engine = create_engine(backend_url, encoding=encoding, echo=global_settings.DEBUG)
+        self.engine = create_engine(backend_url, encoding=encoding, echo=settings.DEBUG)
         db_session = sessionmaker(bind=self.engine)
         self.session = db_session()
 

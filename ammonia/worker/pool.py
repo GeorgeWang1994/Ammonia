@@ -13,10 +13,6 @@ import asyncio
 import functools
 
 
-class Terminal(object):
-    pass
-
-
 class AsyncPool(object):
     """
     协程池
@@ -46,17 +42,15 @@ class AsyncPool(object):
         if not self._workers:
             return
 
-        for _ in range(self.worker_count):
-            await self.queue.put(Terminal())
-
+        # 等待队列中的数据全部被处理完
+        await self.queue.join()
+        # 等待所有的worker被取消
         await asyncio.gather(*self._workers, loop=self.loop)
         self._workers = []
 
     async def _worker(self):
         while True:
             item = await self.queue.get()
-            if isinstance(item, Terminal):
-                break
 
             future, executor_func, args, kwargs = item
             try:
