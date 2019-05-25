@@ -16,8 +16,6 @@ from enum import Enum
 from sqlalchemy import Column, String, TEXT, Enum as Sql_Enum, DATETIME
 from sqlalchemy.ext.declarative import declarative_base
 
-from ammonia.exception import SerializeException
-
 BASE = declarative_base()
 
 
@@ -48,7 +46,7 @@ class Task(BASE):
 
         try:
             return pickle.loads(self._traceback)
-        except SerializeException:
+        except TypeError:
             return ""
 
     @traceback.setter
