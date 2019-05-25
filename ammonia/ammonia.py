@@ -9,7 +9,10 @@
 @desc:      总控制
 """
 
+from functools import wraps
+
 from ammonia.worker.controller import WorkerController
+from ammonia.base.task import Task
 
 
 class Ammonia(object):
@@ -19,6 +22,19 @@ class Ammonia(object):
 
     def run(self):
         self.worker_controller.start()
+
+    @classmethod
+    def task(cls, *task_args, **task_kwargs):
+        def decorator(func):
+            @wraps
+            def wrapper(*args, **kwargs):
+                return func(*args, **kwargs)
+
+            task = Task(exec_func=func, )
+            task.__module__ = func.__module__
+            task.__doc__ = func.__doc__
+            return wrapper
+        return decorator
 
 
 ammonia = Ammonia()
