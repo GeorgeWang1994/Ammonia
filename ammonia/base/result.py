@@ -11,8 +11,16 @@
 
 
 class AsyncResult(object):
-    def __init__(self, task_id, *args, **kwargs):
+    def __init__(self, task_id, backend):
         self.task_id = task_id
+        self.backend = backend
+
+    def _get(self):
+        """
+        从backend中异步获取task_id对应的结果
+        :return:
+        """
+        # todo: 异步获取结果
 
     def get(self):
         pass

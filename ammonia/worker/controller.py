@@ -9,33 +9,36 @@
 @desc:      控制worker
 """
 
-from ammonia.worker.listener import TaskListener
+from queue import Queue
+
+from ammonia.worker.listener import TaskListener, TaskQueueListener
 from ammonia.worker.mq import TaskConsumer, TaskProducer
+from ammonia.worker.pool import AsyncPool
 
 
 class WorkerController(object):
     """
     控制worker
     """
-    def __init__(self):
+    def __init__(self, pool_worker_count=10):
         self.task_consumer = TaskConsumer()
         self.task_producer = TaskProducer()
-        self.listener = TaskListener(task_consumer=self.task_consumer)
-
+        self.ready_queue = Queue()
+        self.listener = TaskListener(task_consumer=self.task_consumer, ready_queue=self.ready_queue)
+        self.queue_listener = TaskQueueListener(ready_queue=self.ready_queue, process_callback=self.process_task)
+        self.pool = AsyncPool(pool_worker_count)
         self.workers = (
             self.listener,
+            self.queue_listener,
+            self.pool,
         )
 
-    def init(self):
-        self.task_consumer.register_callback({})
-
-    def process_task(self):
+    def process_task(self, task):
         pass
 
     def start(self):
         """
         :return:
         """
-        self.init()
         for worker in self.workers:
             worker.start()

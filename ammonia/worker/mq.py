@@ -55,6 +55,5 @@ class TaskProducer(Producer):
     def __init__(self, *args, **kwargs):
         super(TaskProducer, self).__init__(*args, **kwargs)
 
-    def publish_task(self, task_manager):
-        message = task_manager.to_message()
+    def publish_task(self, message):
         super(TaskProducer, self).publish(body=message)
