@@ -12,8 +12,11 @@
 import pickle
 
 from kombu import Connection, Queue, Exchange, Producer, Consumer
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, exc
 
 from ammonia import settings
+from ammonia.backends.models import Task, TaskStatusChoice
 
 # 队列名字
 QUEUE_NAME = "backend_queue"
@@ -22,18 +25,33 @@ QUEUE_NAME = "backend_queue"
 EXCHANGE_NAME = "backend_exchange"
 
 
-class MQBackend(object):
+class BaseBackend(object):
+    def insert_task(self, task_id, status=TaskStatusChoice.START, result="", traceback=""):
+        """
+        添加任务
+        :param task_id:
+        :param status:
+        :param result:
+        :param traceback:
+        :return:
+        """
+        return NotImplemented
+
+
+class MQBackend(BaseBackend):
     """
     利用mq自身功能实现消息持久化
     """
-    def __init__(self):
-        self._exchange = Exchange(EXCHANGE_NAME, durable=True, auto_delete=False)
-        self._queue = Queue(QUEUE_NAME, exchange=self._exchange, routing_key=QUEUE_NAME, auto_delelte=False)
+    def __init__(self, backend_url=settings.BACKEND_URL):
+        super(MQBackend, self).__init__(backend_url)
         self._connection = Connection(
-            hostname=settings.BACKEND_HOSTNAME, userid=settings.BACKEND_USER,
-            port=settings.BACKEND_PORT, connect_timeout=settings.BROKER_CONNECTION_TIMEOUT,
+            hostname=backend_url, connect_timeout=settings.BROKER_CONNECTION_TIMEOUT,
         )
         self._connection.connect()
+        self._connection.create_transport()
+        self._exchange = Exchange(EXCHANGE_NAME, channel=self._connection.channel(), durable=True, auto_delete=False)
+        self._queue = Queue(QUEUE_NAME, exchange=self._exchange, channel=self._connection.channel(),
+                            routing_key=QUEUE_NAME, auto_delelte=False)
         self._cache = {}
 
     def producer(self):
@@ -49,7 +67,7 @@ class MQBackend(object):
         return Consumer(channel=self._connection, queues=[self._queue], no_ack=False,
                         callbacks=task_callback)
 
-    def insert_task(self, task_id, status, result="", traceback=""):
+    def insert_task(self, task_id, status=TaskStatusChoice.START, result="", traceback=""):
         if not task_id or not status:
             return False
 
@@ -86,3 +104,91 @@ class MQBackend(object):
         consumer.close()
         self._cache[task_id] = result[0] if result else None
         return True
+
+
+class DbBackend(BaseBackend):
+    """
+    利用数据库实现消息持久化
+    """
+    def __init__(self, backend_url=settings.BACKEND_URL):
+        super(DbBackend, self).__init__(backend_url)
+        self.engine = create_engine(backend_url, echo=settings.DEBUG)
+        db_session = sessionmaker(bind=self.engine)
+        self.session = db_session()
+
+    def get_task(self, task_id):
+        try:
+            return self.session.query(Task).filter(Task.task_id == task_id).one()
+        except exc.MultipleResultsFound:
+            return None
+
+    def get_tasks_by_status(self, status):
+        if not status:
+            return []
+
+        if status not in TaskStatusChoice:
+            return []
+
+        return self.session.query(Task).filter(Task.status == status).all()
+
+    def get_tasks_by_ids(self, task_id_list):
+        if not task_id_list:
+            return []
+
+        return self.session.query(Task).filter(Task.task_id.in_([task_id_list])).all()
+
+    def insert_task(self, task_id, status=TaskStatusChoice.START, result="", traceback=""):
+        if status not in TaskStatusChoice:
+            return False
+
+        import json
+        _traceback = json.dumps(traceback) if traceback else ""
+        self.session.add(Task(task_id=task_id, status=status, result=result, _traceback=_traceback))
+        self.session.commit()
+        return True
+
+    def update_task_status(self, task_id, status):
+        if not task_id:
+            return False
+
+        if status not in TaskStatusChoice:
+            return False
+
+        task = self.get_task(task_id)
+        if not task:
+            return False
+
+        task.status = status
+        self.session.commit()
+        return True
+
+    def get_error_tasks(self):
+        return self.session.query(Task).filter(Task._traceback != "").all()
+
+    def del_task(self, task_id):
+        task = self.get_task(task_id)
+        if not task:
+            return False
+
+        self.session.delete(task)
+        self.session.commit()
+        return True
+
+
+TYPE_2_BACKEND_CLS = {
+    'rabbitmq': MQBackend,
+    'database': DbBackend,
+}
+
+
+def get_backend_by_settings():
+    """
+    获取backend
+    :param type:
+    :return:
+    """
+    backend_cls = TYPE_2_BACKEND_CLS.get(settings.BACKEND_TYPE or "rabbitmq")
+    return backend_cls()
+
+
+default_backend = get_backend_by_settings()

@@ -9,8 +9,12 @@
 @desc:      任务相关的类
 """
 
+from kombu import Connection
+
+from ammonia.backends.backend import default_backend
 from ammonia.base.registry import registry
 from ammonia.base.result import AsyncResult
+from ammonia.settings import BROKER_CONNECTION_TIMEOUT, BACKEND_URL
 from ammonia.utils import generate_random_uid
 from ammonia.worker.mq import TaskProducer
 
@@ -22,7 +26,7 @@ class Task(object):
         self.task_id = generate_random_uid()
         self.task_name = exec_func.__name__
         self.exec_func = exec_func
-        self.backend = None  # todo: 根据配置获取默认的backend
+        self.backend = default_backend
 
     @property
     def parameter(self):
@@ -31,13 +35,9 @@ class Task(object):
     def execute(self):
         return NotImplemented
 
-    def establish_connection(self):
-        # todo: 建立mq的连接
-        pass
-
-    def get_producer(self, routing_key=None):
-        # todo: 根据mq的参数创建生产者
-        return TaskProducer()
+    @classmethod
+    def get_producer(cls, routing_key=None, channel=None):
+        return TaskProducer(routing_key=routing_key, channel=channel)
 
     def data(self):
         return {
@@ -55,12 +55,11 @@ class Task(object):
         :param kwargs:
         :return:
         """
-        self.establish_connection()
-
-        routing_key = kwargs.get('routing_key')
-        producer = self.get_producer(routing_key=routing_key)
-        producer.publish_task(self.data())
-        return AsyncResult(task_id=self.task_id, backend=self.backend)
+        with Connection(hostname=BACKEND_URL, connect_timeout=BROKER_CONNECTION_TIMEOUT) as conn:
+            routing_key = kwargs.get('routing_key')
+            producer = self.get_producer(routing_key=routing_key, channel=conn.channel())
+            producer.publish_task(self.data())
+            return AsyncResult(task_id=self.task_id, backend=self.backend)
 
     def defer(self, *args, **kwargs):
         return self._defer_async(*args, **kwargs)
