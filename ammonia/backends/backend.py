@@ -26,6 +26,9 @@ EXCHANGE_NAME = "backend_exchange"
 
 
 class BaseBackend(object):
+    def __init__(self, backend_url):
+        self.backend_url = backend_url
+
     def insert_task(self, task_id, status=TaskStatusChoice.START, result="", traceback=""):
         """
         添加任务
@@ -37,22 +40,44 @@ class BaseBackend(object):
         """
         return NotImplemented
 
+    def get_task(self, task_id):
+        """
+        返回任务
+        :param task_id:
+        :return:
+        """
+        return NotImplemented
+
+    def establish_connection(self):
+        """
+        建立连接
+        :return:
+        """
+        return NotImplemented
+
 
 class MQBackend(BaseBackend):
     """
     利用mq自身功能实现消息持久化
     """
     def __init__(self, backend_url=settings.BACKEND_URL):
-        super(MQBackend, self).__init__(backend_url)
-        self._connection = Connection(
-            hostname=backend_url, connect_timeout=settings.BROKER_CONNECTION_TIMEOUT,
-        )
-        self._connection.connect()
-        self._connection.create_transport()
+        super(MQBackend, self).__init__(backend_url=backend_url)
+        self._connection = None
+        self.backend_url = backend_url
+        self._cache = {}
+
+    def declare_mq_base(self):
         self._exchange = Exchange(EXCHANGE_NAME, channel=self._connection.channel(), durable=True, auto_delete=False)
         self._queue = Queue(QUEUE_NAME, exchange=self._exchange, channel=self._connection.channel(),
                             routing_key=QUEUE_NAME, auto_delelte=False)
-        self._cache = {}
+
+    def establish_connection(self):
+        if not self._connection:
+            self._connection = Connection(
+                hostname=self.backend_url, connect_timeout=settings.BROKER_CONNECTION_TIMEOUT,
+            )
+            self._connection.connect()
+        return self._connection
 
     def producer(self):
         if not self._connection:
@@ -176,7 +201,7 @@ class DbBackend(BaseBackend):
 
 
 TYPE_2_BACKEND_CLS = {
-    'rabbitmq': MQBackend,
+    'amqp': MQBackend,
     'database': DbBackend,
 }
 
@@ -187,7 +212,7 @@ def get_backend_by_settings():
     :param type:
     :return:
     """
-    backend_cls = TYPE_2_BACKEND_CLS.get(settings.BACKEND_TYPE or "rabbitmq")
+    backend_cls = TYPE_2_BACKEND_CLS.get(settings.BACKEND_TYPE or "amqp")
     return backend_cls()
 
 

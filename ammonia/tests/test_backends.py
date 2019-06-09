@@ -11,7 +11,7 @@
 
 import unittest
 
-from ammonia.backends.database import DbBackend
+from ammonia.backends.backend import DbBackend
 from ammonia.backends.models import BASE, TaskStatusChoice, Task
 from ammonia.utils import generate_random_uid
 
@@ -19,7 +19,7 @@ from ammonia.utils import generate_random_uid
 class TestBase(unittest.TestCase):
     def setUp(self):
         # 创建表
-        self.backend = DbBackend('mysql+pymysql://root:123456@localhost/ammonia?charset=utf8', encoding='utf-8')
+        self.backend = DbBackend('mysql+pymysql://root:123456@localhost/ammonia?charset=utf8')
         BASE.metadata.create_all(self.backend.engine)
 
     def tearDown(self):

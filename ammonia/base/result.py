@@ -9,6 +9,8 @@
 @desc:      任务结果封装
 """
 
+from ammonia.base.registry import registry
+
 
 class AsyncResult(object):
     def __init__(self, task_id, backend):
@@ -20,7 +22,11 @@ class AsyncResult(object):
         从backend中异步获取task_id对应的结果
         :return:
         """
-        # todo: 异步获取结果
+        task = registry.get(self.task_id)
+        if not task:
+            raise Exception("task %s not found" % self.task_id)
+
+        self.backend
 
     def get(self):
         pass

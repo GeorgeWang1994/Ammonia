@@ -14,16 +14,16 @@
 DEBUG = True
 
 # 数据库主机名
-BACKEND_HOSTNAME = ""
+BACKEND_HOSTNAME = "localhost"
 
 # 数据库端口号
-BACKEND_PORT = ""
+BACKEND_PORT = "5672"
 
 # 数据库端用户名
-BACKEND_USER = ""
+BACKEND_USER = "guest"
 
 # 数据库端密码
-BACKEND_PASSWORD = ""
+BACKEND_PASSWORD = "guest"
 
 # 数据库编码
 BACKEND_ENCODING = "utf-8"
@@ -32,10 +32,10 @@ BACKEND_ENCODING = "utf-8"
 BACKEND_NAME = ""
 
 # 数据信息（数据库类型+数据库驱动名称）
-BACKEND_TYPE = ""
+BACKEND_TYPE = "amqp"
 
 # 数据库URL(数据库类型+数据库驱动名称://用户名:口令@机器地址:端口号/数据库名)
-BACKEND_URL = "{type}//{user}:{password}@{host}:{port}/{db_name}".format(
+BACKEND_URL = "{type}://{user}:{password}@{host}:{port}//{db_name}".format(
     type=BACKEND_TYPE, user=BACKEND_USER, password=BACKEND_PASSWORD,
     host=BACKEND_HOSTNAME, port=BACKEND_PORT, db_name=BACKEND_NAME
 )

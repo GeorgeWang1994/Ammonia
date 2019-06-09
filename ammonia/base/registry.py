@@ -27,14 +27,14 @@ class Registry(object):
         :param task:
         :return:
         """
-        self.cache[task.id] = task
+        self.cache[task.task_id] = task
 
     def unregister(self, task):
         """
         :param task:
         :return:
         """
-        self.cache.pop(task.id, None)
+        self.cache.pop(task.task_id, None)
 
     def task(self, task_id):
         """
