@@ -68,14 +68,14 @@ class BackendConnection(Connection):
     hostname = settings.BACKEND_URL
 
 
-backend_connection = TaskConnection()
+backend_connection = BackendConnection()
 
-backend_channel = task_connection.channel()
+backend_channel = backend_connection.channel()
 
 
 class BackendExchange(Exchange):
     def __init__(self, name=None, *args, **kwargs):
-        super(BackendExchange, self).__init__(name=name, channel=task_channel, *args, **kwargs)
+        super(BackendExchange, self).__init__(name=name, channel=backend_channel, *args, **kwargs)
 
 
 backend_exchange = BackendExchange()
@@ -85,7 +85,7 @@ class BackendQueue(Queue):
     def __init__(self, name=None, routing_key=None, *args, **kwargs):
         super(BackendQueue, self).__init__(
             name=name, exchang=task_exchange, routing_key=routing_key,
-            channel=task_channel, *args, **kwargs
+            channel=backend_channel, *args, **kwargs
         )
 
 

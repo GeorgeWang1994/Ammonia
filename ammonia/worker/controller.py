@@ -12,7 +12,7 @@
 from queue import Queue
 
 from ammonia.worker.listener import TaskListener, TaskQueueListener
-from ammonia.worker.mq import TaskConsumer, TaskProducer
+from ammonia.mq import TaskConsumer, TaskProducer
 from ammonia.worker.pool import AsyncPool
 
 
@@ -33,8 +33,8 @@ class WorkerController(object):
             self.pool,
         )
 
-    def process_task(self, task):
-        pass
+    def process_task(self, task_manager):
+        self.pool.apply_async(task_manager.task.exec_func())
 
     def start(self):
         """

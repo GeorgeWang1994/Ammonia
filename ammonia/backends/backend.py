@@ -11,12 +11,13 @@
 
 import pickle
 
-from kombu import Connection, Queue, Exchange, Producer, Consumer
+from kombu import Producer, Consumer
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, exc
 
 from ammonia import settings
 from ammonia.backends.models import Task, TaskStatusChoice
+from ammonia.mq import backend_connection, backend_queues
 
 # 队列名字
 QUEUE_NAME = "backend_queue"
@@ -55,6 +56,13 @@ class BaseBackend(object):
         """
         return NotImplemented
 
+    def close_connection(self):
+        """
+        关闭连接
+        :return:
+        """
+        return NotImplemented
+
 
 class MQBackend(BaseBackend):
     """
@@ -66,30 +74,30 @@ class MQBackend(BaseBackend):
         self.backend_url = backend_url
         self._cache = {}
 
-    def declare_mq_base(self):
-        self._exchange = Exchange(EXCHANGE_NAME, channel=self._connection.channel(), durable=True, auto_delete=False)
-        self._queue = Queue(QUEUE_NAME, exchange=self._exchange, channel=self._connection.channel(),
-                            routing_key=QUEUE_NAME, auto_delelte=False)
-
     def establish_connection(self):
         if not self._connection:
-            self._connection = Connection(
-                hostname=self.backend_url, connect_timeout=settings.BROKER_CONNECTION_TIMEOUT,
-            )
+            self._connection = backend_connection
             self._connection.connect()
+
         return self._connection
+
+    def close_connection(self):
+        if self._connection:
+            self._connection.close()
+
+        self._connection = None
 
     def producer(self):
         if not self._connection:
-            return None
+            self.establish_connection()
 
-        return Producer(channel=self._connection, serializer='pickle')
+        return Producer(channel=self._connection.channel, serializer='pickle')
 
     def consumer(self, task_callback):
         if not self._connection:
-            return None
+            self.establish_connection()
 
-        return Consumer(channel=self._connection, queues=[self._queue], no_ack=False,
+        return Consumer(channel=self._connection, queues=backend_queues, no_ack=False,
                         callbacks=task_callback)
 
     def insert_task(self, task_id, status=TaskStatusChoice.START, result="", traceback=""):
@@ -97,8 +105,6 @@ class MQBackend(BaseBackend):
             return False
 
         producer = self.producer()
-        if not producer:
-            return False
 
         task_dict = {
             "task_id": task_id,
@@ -106,7 +112,8 @@ class MQBackend(BaseBackend):
             "result": result,
             "traceback": pickle.dumps(traceback),
         }
-        producer.publish(task_dict, exchange=self._exchange, routing_key=QUEUE_NAME, declare=[self._queue])
+        producer.publish(task_dict, exchange=self._connection.exchange,
+                         routing_key=QUEUE_NAME, declare=backend_queues)
         producer.close()
         return True
 
@@ -117,14 +124,11 @@ class MQBackend(BaseBackend):
         result = []  # 利用可变数据记录结果
 
         def process_task_callback(body, message):
-            print(body)
+            print("task_content %s" % body)
             message.ack()
             result.append(body)
 
         consumer = self.consumer(process_task_callback)
-        if not consumer:
-            return False
-
         consumer.consume()
         consumer.close()
         self._cache[task_id] = result[0] if result else None
