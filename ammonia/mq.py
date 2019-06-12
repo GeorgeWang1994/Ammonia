@@ -74,34 +74,34 @@ backend_channel = backend_connection.channel()
 
 
 class BackendExchange(Exchange):
-    def __init__(self, name=None, *args, **kwargs):
-        super(BackendExchange, self).__init__(name=name, channel=backend_channel, *args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        # 默认参数durable为True，auto_delete=False，保证持久化
+        super(BackendExchange, self).__init__(channel=backend_channel, *args, **kwargs)
 
 
 backend_exchange = BackendExchange()
 
 
 class BackendQueue(Queue):
-    def __init__(self, name=None, routing_key=None, *args, **kwargs):
+    def __init__(self, routing_key="", *args, **kwargs):
+        # 默认参数durable为True，auto_delete=False，保证持久化，并且用完即删除
         super(BackendQueue, self).__init__(
-            name=name, exchang=task_exchange, routing_key=routing_key,
+            exchang=backend_exchange, routing_key=routing_key,
             channel=backend_channel, *args, **kwargs
         )
 
 
-backend_queues = [BackendQueue("backend1", "backend1"), BackendQueue("backend2", "backend2"),
-                  BackendQueue("backend3", "backend3")]
-
-
 class BackendConsumer(Consumer):
-    def __init__(self, channel=None, *args, **kwargs):
-        super(BackendConsumer, self).__init__(channel=channel or backend_channel, queues=backend_queues, *args, **kwargs)
+    def __init__(self, routing_key, callbacks=None, *args, **kwargs):
+        queues = [BackendQueue(routing_key=routing_key)]
+        super(BackendConsumer, self).__init__(channel=backend_channel, queues=queues, no_ack=False,
+                                              callbacks=callbacks, *args, **kwargs)
 
 
 class BackendProducer(Producer):
-    def __init__(self, routing_key='', channel=None, *args, **kwargs):
-        super(BackendProducer, self).__init__(routing_key=routing_key, channel=channel or backend_channel,
+    def __init__(self, routing_key="", *args, **kwargs):
+        super(BackendProducer, self).__init__(routing_key=routing_key, channel=backend_channel,
                                               exchange=backend_exchange, *args, **kwargs)
 
     def publish_task(self, message):
-        super(BackendProducer, self).publish(body=message)
+        super(BackendProducer, self).publish(body=message, serializer="pickle")

@@ -11,6 +11,7 @@
 import time
 from queue import Empty
 from threading import Thread
+
 from ammonia.base.task import TaskManager
 
 
@@ -54,8 +55,8 @@ class TaskQueueListener(Thread):
             try:
                 task_msg = self.ready_queue.get(timeout=1)
                 if task_msg:
-                    task_manager = TaskManager.to_task(task_msg)
-                    self.process_callback(task_manager)
+                    task = TaskManager.to_task(task_msg)
+                    self.process_callback(task)
                     self.ready_queue.task_done()
             except Empty:
                 pass

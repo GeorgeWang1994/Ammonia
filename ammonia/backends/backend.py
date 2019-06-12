@@ -9,15 +9,15 @@
 @desc:      RabbitMq的持久化，其是通过设置参数durable=True实现的
 """
 
-import pickle
+import time
 
-from kombu import Producer, Consumer
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, exc
 
 from ammonia import settings
-from ammonia.backends.models import Task, TaskStatusChoice
-from ammonia.mq import backend_connection, backend_queues
+from ammonia.backends.models import Task
+from ammonia.mq import backend_connection, BackendConsumer, BackendProducer
+from ammonia.state import TaskStatusEnum
 
 # 队列名字
 QUEUE_NAME = "backend_queue"
@@ -30,21 +30,31 @@ class BaseBackend(object):
     def __init__(self, backend_url):
         self.backend_url = backend_url
 
-    def insert_task(self, task_id, status=TaskStatusChoice.START, result="", traceback=""):
+    def mark_task_success(self, task_id, result=None):
         """
-        添加任务
+        标记任务为已经完成
         :param task_id:
-        :param status:
         :param result:
-        :param traceback:
+        :param trace:
         :return:
         """
         return NotImplemented
 
-    def get_task(self, task_id):
+    def mark_task_fail(self, task_id, result=None):
         """
-        返回任务
+        标记任务为失败
         :param task_id:
+        :param result:
+        :param trace:
+        :return:
+        """
+        return NotImplemented
+
+    def get_task_result(self, task_id, timeout=None):
+        """
+        返回任务的结果
+        :param task_id:
+        :param timeout: 阻塞时间（None表示不阻塞直接拿，0表示无限阻塞，其余为阻塞秒数）
         :return:
         """
         return NotImplemented
@@ -72,7 +82,6 @@ class MQBackend(BaseBackend):
         super(MQBackend, self).__init__(backend_url=backend_url)
         self._connection = None
         self.backend_url = backend_url
-        self._cache = {}
 
     def establish_connection(self):
         if not self._connection:
@@ -91,17 +100,16 @@ class MQBackend(BaseBackend):
         if not self._connection:
             self.establish_connection()
 
-        return Producer(channel=self._connection.channel, serializer='pickle')
+        return BackendProducer()
 
-    def consumer(self, task_callback):
+    def consumer(self, task_id, task_callback):
         if not self._connection:
             self.establish_connection()
 
-        return Consumer(channel=self._connection, queues=backend_queues, no_ack=False,
-                        callbacks=task_callback)
+        return BackendConsumer(routing_key=task_id, callbacks=task_callback)
 
-    def insert_task(self, task_id, status=TaskStatusChoice.START, result="", traceback=""):
-        if not task_id or not status:
+    def _insert_task(self, task_id, status=TaskStatusEnum.CREATED.value, result=None, traceback=None):
+        if not task_id or status not in TaskStatusEnum:
             return False
 
         producer = self.producer()
@@ -110,16 +118,28 @@ class MQBackend(BaseBackend):
             "task_id": task_id,
             "status": status,
             "result": result,
-            "traceback": pickle.dumps(traceback),
+            "traceback": traceback,
         }
-        producer.publish(task_dict, exchange=self._connection.exchange,
-                         routing_key=QUEUE_NAME, declare=backend_queues)
+        # 默认发送初始化时候的路由队列
+        producer.publish_task(task_dict)
         producer.close()
         return True
 
-    def get_task(self, task_id):
+    def mark_task_success(self, task_id, result=None):
         if not task_id:
             return False
+
+        self._insert_task(task_id=task_id, status=TaskStatusEnum.SUCCESS.value, result=result)
+
+    def mark_task_fail(self, task_id, result=None):
+        if not task_id:
+            return False
+
+        self._insert_task(task_id=task_id, status=TaskStatusEnum.FAIL.value, traceback=result)
+
+    def get_task_result(self, task_id, timeout=None):
+        if not task_id:
+            return False, None
 
         result = []  # 利用可变数据记录结果
 
@@ -128,11 +148,34 @@ class MQBackend(BaseBackend):
             message.ack()
             result.append(body)
 
-        consumer = self.consumer(process_task_callback)
-        consumer.consume()
+        consumer = self.consumer(task_id, process_task_callback)
+        sleep_time = 0
+
+        while True:
+            result = consumer.qos(prefetch_count=1)
+            if result:
+                break
+            else:
+                if timeout is None:
+                    break
+
+                if timeout and sleep_time >= timeout:
+                    break
+
+                time.sleep(1)
+                sleep_time += 1
+
         consumer.close()
-        self._cache[task_id] = result[0] if result else None
-        return True
+
+        if not result:
+            return True, None
+
+        result = result[0]
+        status = result["status"]
+        if status == TaskStatusEnum.FAIL.value:
+            return True, result["traceback"]
+
+        return True, result["result"]
 
 
 class DbBackend(BaseBackend):
@@ -155,7 +198,7 @@ class DbBackend(BaseBackend):
         if not status:
             return []
 
-        if status not in TaskStatusChoice:
+        if status not in TaskStatusEnum:
             return []
 
         return self.session.query(Task).filter(Task.status == status).all()
@@ -166,21 +209,19 @@ class DbBackend(BaseBackend):
 
         return self.session.query(Task).filter(Task.task_id.in_([task_id_list])).all()
 
-    def insert_task(self, task_id, status=TaskStatusChoice.START, result="", traceback=""):
-        if status not in TaskStatusChoice:
+    def _insert_task(self, task_id, status=TaskStatusEnum.CREATED.value, result=None, traceback=None):
+        if not task_id or status not in TaskStatusEnum:
             return False
 
-        import json
-        _traceback = json.dumps(traceback) if traceback else ""
-        self.session.add(Task(task_id=task_id, status=status, result=result, _traceback=_traceback))
+        self.session.add(Task(task_id=task_id, status=status, result=result, _traceback=traceback))
         self.session.commit()
         return True
 
-    def update_task_status(self, task_id, status):
+    def _update_task_status(self, task_id, status):
         if not task_id:
             return False
 
-        if status not in TaskStatusChoice:
+        if status not in TaskStatusEnum:
             return False
 
         task = self.get_task(task_id)
@@ -191,17 +232,31 @@ class DbBackend(BaseBackend):
         self.session.commit()
         return True
 
-    def get_error_tasks(self):
-        return self.session.query(Task).filter(Task._traceback != "").all()
-
-    def del_task(self, task_id):
-        task = self.get_task(task_id)
-        if not task:
+    def mark_task_success(self, task_id, result=None):
+        if not task_id:
             return False
 
-        self.session.delete(task)
-        self.session.commit()
-        return True
+        self._insert_task(task_id=task_id, status=TaskStatusEnum.SUCCESS.value, result=result)
+
+    def mark_task_fail(self, task_id, result=None):
+        if not task_id:
+            return False
+
+        self._insert_task(task_id=task_id, status=TaskStatusEnum.FAIL.value, traceback=result)
+
+    def get_task_result(self, task_id, timeout=None):
+        if not task_id:
+            return False, None
+
+        while True:
+            task = self.get_task(task_id)
+            if not task:
+                return False, None
+
+            if task.status == TaskStatusEnum.FAIL.value:
+                return True, task.traceback
+
+            return True, task.result
 
 
 TYPE_2_BACKEND_CLS = {

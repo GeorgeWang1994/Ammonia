@@ -11,8 +11,9 @@
 
 from queue import Queue
 
-from ammonia.worker.listener import TaskListener, TaskQueueListener
+from ammonia.base.task import TaskManager
 from ammonia.mq import TaskConsumer, TaskProducer
+from ammonia.worker.listener import TaskListener, TaskQueueListener
 from ammonia.worker.pool import AsyncPool
 
 
@@ -33,8 +34,8 @@ class WorkerController(object):
             self.pool,
         )
 
-    def process_task(self, task_manager):
-        self.pool.apply_async(task_manager.task.exec_func())
+    def process_task(self, task):
+        TaskManager.execute_task(self.pool, task)
 
     def start(self):
         """

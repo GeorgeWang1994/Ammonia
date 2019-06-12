@@ -11,26 +11,21 @@
 
 import datetime
 import pickle
-from enum import Enum
 
 from sqlalchemy import Column, String, TEXT, Enum as Sql_Enum, DATETIME
 from sqlalchemy.ext.declarative import declarative_base
 
+from ammonia.state import TaskStatusEnum
+
 BASE = declarative_base()
-
-
-class TaskStatusChoice(Enum):
-    START = 1
-    PROCESSING = 2
-    FINISH = 3
 
 
 class Task(BASE):
     __tablename__ = "task"
 
     task_id = Column(String(50), primary_key=True, comment=u"任务id")
-    status = Column(Sql_Enum(TaskStatusChoice), comment=u"任务当前的状态", nullable=False,
-                    default=TaskStatusChoice.START)
+    status = Column(Sql_Enum(TaskStatusEnum), comment=u"任务当前的状态", nullable=False,
+                    default=TaskStatusEnum.CREATED)
     result = Column(String(200), comment=u"任务执行的结果", default="")
     _traceback = Column(TEXT, comment=u"报错信息", default="")
     create_time = Column(DATETIME, comment=u"创建时间", default=datetime.datetime.now(), nullable=False)
