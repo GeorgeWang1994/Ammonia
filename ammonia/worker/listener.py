@@ -12,17 +12,35 @@ import time
 from queue import Empty
 from threading import Thread
 
-from ammonia.base.task import TaskManager
+from ammonia.base.task import TaskManager, TaskConsumer
+from ammonia.mq import TaskConnection, TaskExchange, TaskQueue
 
 
 class TaskListener(Thread):
     """
     负责监听consumer，将consumer中的消息给取出来
     """
-    def __init__(self, task_consumer, ready_queue, *args, **kwargs):
+    def __init__(self, ready_queue, *args, **kwargs):
         super(TaskListener, self).__init__(name="task_listener", target=self.consume, *args, **kwargs)
-        self.task_consumer = task_consumer
+        self.task_consumer = None
         self.ready_queue = ready_queue
+        self._connection = None
+
+    def establish_connection(self):
+        if self._connection:
+            self._connection.connect()
+            return
+
+        self._connection = TaskConnection()
+        self._connection.connect()
+        exchange = TaskExchange(channel=self._connection.channel())
+        queues = [TaskQueue(routing_key="task_queue", channel=self._connection.channel(), exchange=exchange)]
+        self.task_consumer = TaskConsumer(channel=self._connection.channel(), queues=queues)
+
+    def start(self):
+        while True:
+            self.establish_connection()
+            self.consume()
 
     def consume(self):
         """

@@ -20,3 +20,7 @@ class TaskStatusEnum(Enum):
     SUCCESS = "success"  # 处理成功
     FAIL = "fail"        # 处理失败
     RETRY = "retry"        # 重试
+
+    @classmethod
+    def all_values(cls):
+        return cls._value2member_map_.keys()

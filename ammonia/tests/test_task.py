@@ -27,6 +27,5 @@ class TestTask(TestCase):
         def get_sum(a, b):
             return a + b
 
-        result = get_sum.defer(1, 2)
-        result = result.get()
+        result = get_sum(1, 2)
         self.assertEqual(result, 3)

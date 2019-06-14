@@ -12,24 +12,20 @@
 import datetime
 import pickle
 
-from sqlalchemy import Column, String, TEXT, Enum as Sql_Enum, DATETIME
-from sqlalchemy.ext.declarative import declarative_base
-
+from ammonia.db import db
 from ammonia.state import TaskStatusEnum
 
-BASE = declarative_base()
 
-
-class Task(BASE):
+class Task(db.Model):
     __tablename__ = "task"
 
-    task_id = Column(String(50), primary_key=True, comment=u"任务id")
-    status = Column(Sql_Enum(TaskStatusEnum), comment=u"任务当前的状态", nullable=False,
-                    default=TaskStatusEnum.CREATED)
-    result = Column(String(200), comment=u"任务执行的结果", default="")
-    _traceback = Column(TEXT, comment=u"报错信息", default="")
-    create_time = Column(DATETIME, comment=u"创建时间", default=datetime.datetime.now(), nullable=False)
-    modified_time = Column(DATETIME, comment=u"修改时间", default=datetime.datetime.now(), nullable=False)
+    task_id = db.Column(db.String(50), primary_key=True, comment=u"任务id")
+    status = db.Column(db.String(50), comment=u"任务当前的状态", nullable=False,
+                    default=TaskStatusEnum.CREATED.value)
+    result = db.Column(db.TEXT, comment=u"任务执行的结果", default="", nullable=True)
+    _traceback = db.Column(db.TEXT, comment=u"报错信息", default="", nullable=True)
+    create_time = db.Column(db.DATETIME, comment=u"创建时间", default=datetime.datetime.now(), nullable=False)
+    modified_time = db.Column(db.DATETIME, comment=u"修改时间", default=datetime.datetime.now(), nullable=False)
 
     def __repr__(self):
         return "task:%s|%s" % (self.task_id, self.status)

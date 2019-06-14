@@ -96,23 +96,23 @@ class MQBackend(BaseBackend):
 
         self._connection = None
 
-    def producer(self):
+    def producer(self, task_id):
         if not self._connection:
             self.establish_connection()
 
-        return BackendProducer()
+        return BackendProducer(channel=self._connection.channel(), routing_key=task_id)
 
     def consumer(self, task_id, task_callback):
         if not self._connection:
             self.establish_connection()
 
-        return BackendConsumer(routing_key=task_id, callbacks=task_callback)
+        return BackendConsumer(routing_key=task_id, callbacks=task_callback, channel=self._connection.channel())
 
     def _insert_task(self, task_id, status=TaskStatusEnum.CREATED.value, result=None, traceback=None):
         if not task_id or status not in TaskStatusEnum:
             return False
 
-        producer = self.producer()
+        producer = self.producer(task_id=task_id)
 
         task_dict = {
             "task_id": task_id,
@@ -130,12 +130,14 @@ class MQBackend(BaseBackend):
             return False
 
         self._insert_task(task_id=task_id, status=TaskStatusEnum.SUCCESS.value, result=result)
+        return True
 
     def mark_task_fail(self, task_id, result=None):
         if not task_id:
             return False
 
         self._insert_task(task_id=task_id, status=TaskStatusEnum.FAIL.value, traceback=result)
+        return True
 
     def get_task_result(self, task_id, timeout=None):
         if not task_id:
@@ -194,15 +196,6 @@ class DbBackend(BaseBackend):
         except exc.MultipleResultsFound:
             return None
 
-    def get_tasks_by_status(self, status):
-        if not status:
-            return []
-
-        if status not in TaskStatusEnum:
-            return []
-
-        return self.session.query(Task).filter(Task.status == status).all()
-
     def get_tasks_by_ids(self, task_id_list):
         if not task_id_list:
             return []
@@ -210,25 +203,10 @@ class DbBackend(BaseBackend):
         return self.session.query(Task).filter(Task.task_id.in_([task_id_list])).all()
 
     def _insert_task(self, task_id, status=TaskStatusEnum.CREATED.value, result=None, traceback=None):
-        if not task_id or status not in TaskStatusEnum:
+        if not task_id or status not in TaskStatusEnum.all_values():
             return False
 
         self.session.add(Task(task_id=task_id, status=status, result=result, _traceback=traceback))
-        self.session.commit()
-        return True
-
-    def _update_task_status(self, task_id, status):
-        if not task_id:
-            return False
-
-        if status not in TaskStatusEnum:
-            return False
-
-        task = self.get_task(task_id)
-        if not task:
-            return False
-
-        task.status = status
         self.session.commit()
         return True
 
@@ -237,12 +215,14 @@ class DbBackend(BaseBackend):
             return False
 
         self._insert_task(task_id=task_id, status=TaskStatusEnum.SUCCESS.value, result=result)
+        return True
 
     def mark_task_fail(self, task_id, result=None):
         if not task_id:
             return False
 
         self._insert_task(task_id=task_id, status=TaskStatusEnum.FAIL.value, traceback=result)
+        return True
 
     def get_task_result(self, task_id, timeout=None):
         if not task_id:

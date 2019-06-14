@@ -12,7 +12,6 @@
 from queue import Queue
 
 from ammonia.base.task import TaskManager
-from ammonia.mq import TaskConsumer, TaskProducer
 from ammonia.worker.listener import TaskListener, TaskQueueListener
 from ammonia.worker.pool import AsyncPool
 
@@ -22,10 +21,8 @@ class WorkerController(object):
     控制worker
     """
     def __init__(self, pool_worker_count=10):
-        self.task_consumer = TaskConsumer()
-        self.task_producer = TaskProducer()
         self.ready_queue = Queue()
-        self.listener = TaskListener(task_consumer=self.task_consumer, ready_queue=self.ready_queue)
+        self.listener = TaskListener(ready_queue=self.ready_queue)
         self.queue_listener = TaskQueueListener(ready_queue=self.ready_queue, process_callback=self.process_task)
         self.pool = AsyncPool(pool_worker_count)
         self.workers = (

@@ -24,6 +24,7 @@ from ammonia.utils import generate_random_uid
 
 class Task(object):
     def __init__(self, exec_func, task_id, *args, **kwargs):
+        # 这里的args和kwargs是函数的，而装饰器的参数则是类的参数
         self.args = args
         self.kwargs = kwargs
         self.task_id = task_id
@@ -64,7 +65,7 @@ class Task(object):
         :return:
         """
         with Connection(hostname=BACKEND_URL, connect_timeout=BROKER_CONNECTION_TIMEOUT) as conn:
-            routing_key = self.routing_key
+            routing_key = getattr(self, "routing_key", default=None)
             producer = self.get_task_producer(routing_key=routing_key, channel=conn.channel())
             producer.publish_task(pickle.dumps(self.data()))
             self.status = TaskStatusEnum.PREPARE.value
@@ -177,11 +178,11 @@ class TaskTrace(object):
 
     def do_exec_success(self, return_value):
         self.task.status = TaskStatusEnum.SUCCESS.value
-        self.task.backend.mark_task_success(task_id=self.task.id, result=return_value)
+        self.task.backend.mark_task_success(task_id=self.task.task_id, result=return_value)
 
     def do_exec_fail(self, return_value):
         self.task.status = TaskStatusEnum.FAIL.value
-        self.task.backend.mark_task_fail(task_id=self.task.id, result=return_value)
+        self.task.backend.mark_task_fail(task_id=self.task.task_id, result=return_value)
 
 
 def task_trace_execute(task):

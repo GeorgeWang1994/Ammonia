@@ -12,7 +12,7 @@
 import unittest
 
 from ammonia.backends.backend import DbBackend
-from ammonia.backends.models import BASE, TaskStatusChoice, Task
+from ammonia.backends.models import TaskStatusEnum, Task
 from ammonia.utils import generate_random_uid
 
 
@@ -20,7 +20,6 @@ class TestBase(unittest.TestCase):
     def setUp(self):
         # 创建表
         self.backend = DbBackend('mysql+pymysql://root:123456@localhost/ammonia?charset=utf8')
-        BASE.metadata.create_all(self.backend.engine)
 
     def tearDown(self):
         # 将表删除
@@ -32,26 +31,16 @@ class TestDbBackend(TestBase):
     """
     测试数据持久化
     """
-    def test_insert_delete_get_task(self):
+    def test_insert_update_get_task(self):
         """
-        测试插入删除获取任务
+        测试插入更新任务
         """
         task_id1 = generate_random_uid()
-        self.backend.insert_task(task_id1)
-        task_id2 = generate_random_uid()
-        self.backend.insert_task(task_id2, TaskStatusChoice.PROCESSING)
-        task_id3 = generate_random_uid()
-        self.backend.insert_task(task_id3, TaskStatusChoice.FINISH, "3", {"error": "type error"})
-
+        self.backend.mark_task_success(task_id=task_id1, result=100)
         result = self.backend.get_task(task_id1)
-        self.assertEqual(result.task_id, task_id1)
-        self.assertEqual(result.status, TaskStatusChoice.START)
+        self.assertEqual(result.status, TaskStatusEnum.SUCCESS.value)
 
-        result = self.backend.get_tasks_by_status(TaskStatusChoice.PROCESSING)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].task_id, task_id2)
-
-        result = self.backend.get_error_tasks()
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].task_id, task_id3)
-
+        task_id2 = generate_random_uid()
+        self.backend.mark_task_fail(task_id=task_id2, result={"error": "error"})
+        result = self.backend.get_task(task_id2)
+        self.assertEqual(result.status, TaskStatusEnum.FAIL.value)

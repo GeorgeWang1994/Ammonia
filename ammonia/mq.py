@@ -25,37 +25,29 @@ class TaskConnection(Connection):
 
 task_connection = TaskConnection()
 
-task_channel = task_connection.channel()
-
 
 class TaskExchange(Exchange):
     def __init__(self, name=None, *args, **kwargs):
-        super(TaskExchange, self).__init__(name=name, channel=task_channel, *args, **kwargs)
-
-
-task_exchange = TaskExchange()
+        super(TaskExchange, self).__init__(name=name, channel=task_connection.channel(), *args, **kwargs)
 
 
 class TaskQueue(Queue):
-    def __init__(self, name=None, routing_key=None, *args, **kwargs):
+    def __init__(self, name=None, routing_key=None, exchange=None, *args, **kwargs):
         super(TaskQueue, self).__init__(
-            name=name, exchang=task_exchange, routing_key=routing_key,
-            channel=task_channel, *args, **kwargs
+            name=name, exchange=exchange, routing_key=routing_key,
+            channel=task_connection.channel(), *args, **kwargs
         )
 
 
-task_queues = [TaskQueue("task1", "task1"), TaskQueue("task2", "task2"), TaskQueue("task3", "task3")]
-
-
 class TaskConsumer(Consumer):
-    def __init__(self, channel=None, *args, **kwargs):
-        super(TaskConsumer, self).__init__(channel=channel or task_channel, queues=task_queues, *args, **kwargs)
+    def __init__(self, channel=None, queues=None, *args, **kwargs):
+        super(TaskConsumer, self).__init__(channel=channel or task_connection.channel(), queues=queues, *args, **kwargs)
 
 
 class TaskProducer(Producer):
-    def __init__(self, routing_key='', channel=None, *args, **kwargs):
-        super(TaskProducer, self).__init__(routing_key=routing_key, channel=channel or task_channel,
-                                           exchange=task_exchange, *args, **kwargs)
+    def __init__(self, routing_key='', channel=None, exchange=None, *args, **kwargs):
+        super(TaskProducer, self).__init__(routing_key=routing_key, channel=channel or task_connection.channel(),
+                                           exchange=exchange, *args, **kwargs)
 
     def publish_task(self, message):
         super(TaskProducer, self).publish(body=message)
@@ -70,38 +62,33 @@ class BackendConnection(Connection):
 
 backend_connection = BackendConnection()
 
-backend_channel = backend_connection.channel()
-
 
 class BackendExchange(Exchange):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, channel=None, *args, **kwargs):
         # 默认参数durable为True，auto_delete=False，保证持久化
-        super(BackendExchange, self).__init__(channel=backend_channel, *args, **kwargs)
-
-
-backend_exchange = BackendExchange()
+        super(BackendExchange, self).__init__(channel=channel, *args, **kwargs)
 
 
 class BackendQueue(Queue):
-    def __init__(self, routing_key="", *args, **kwargs):
+    def __init__(self, routing_key="", exchange=None, channel=None, *args, **kwargs):
         # 默认参数durable为True，auto_delete=False，保证持久化，并且用完即删除
         super(BackendQueue, self).__init__(
-            exchang=backend_exchange, routing_key=routing_key,
-            channel=backend_channel, *args, **kwargs
+            exchang=exchange, routing_key=routing_key,
+            channel=channel, *args, **kwargs
         )
 
 
 class BackendConsumer(Consumer):
-    def __init__(self, routing_key, callbacks=None, *args, **kwargs):
-        queues = [BackendQueue(routing_key=routing_key)]
-        super(BackendConsumer, self).__init__(channel=backend_channel, queues=queues, no_ack=False,
+    def __init__(self, routing_key, channel=None, callbacks=None, *args, **kwargs):
+        queues = [BackendQueue(routing_key=routing_key, channel=channel)]
+        super(BackendConsumer, self).__init__(channel=channel, queues=queues, no_ack=False,
                                               callbacks=callbacks, *args, **kwargs)
 
 
 class BackendProducer(Producer):
-    def __init__(self, routing_key="", *args, **kwargs):
-        super(BackendProducer, self).__init__(routing_key=routing_key, channel=backend_channel,
-                                              exchange=backend_exchange, *args, **kwargs)
+    def __init__(self, routing_key="", channel=None, exchange=None, *args, **kwargs):
+        super(BackendProducer, self).__init__(routing_key=routing_key, channel=channel,
+                                              exchange=exchange, *args, **kwargs)
 
     def publish_task(self, message):
         super(BackendProducer, self).publish(body=message, serializer="pickle")
