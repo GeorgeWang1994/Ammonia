@@ -9,6 +9,7 @@
 @desc:      RabbitMq的持久化，其是通过设置参数durable=True实现的
 """
 
+import pickle
 import time
 
 from sqlalchemy import create_engine
@@ -29,6 +30,7 @@ EXCHANGE_NAME = "backend_exchange"
 class BaseBackend(object):
     def __init__(self, backend_url):
         self.backend_url = backend_url
+        self._connection = None
 
     def mark_task_success(self, task_id, result=None):
         """
@@ -80,10 +82,12 @@ class MQBackend(BaseBackend):
     """
     def __init__(self, backend_url=settings.BACKEND_URL):
         super(MQBackend, self).__init__(backend_url=backend_url)
-        self._connection = None
         self.backend_url = backend_url
 
     def establish_connection(self):
+        if self._connection:
+            return
+
         if not self._connection:
             self._connection = backend_connection
             self._connection.connect()
@@ -91,20 +95,21 @@ class MQBackend(BaseBackend):
         return self._connection
 
     def close_connection(self):
+        if not self._connection:
+            return
+
         if self._connection:
             self._connection.close()
 
         self._connection = None
 
     def producer(self, task_id):
-        if not self._connection:
-            self.establish_connection()
+        self.establish_connection()
 
         return BackendProducer(channel=self._connection.channel(), routing_key=task_id)
 
     def consumer(self, task_id, task_callback):
-        if not self._connection:
-            self.establish_connection()
+        self.establish_connection()
 
         return BackendConsumer(routing_key=task_id, callbacks=task_callback, channel=self._connection.channel())
 
@@ -186,13 +191,40 @@ class DbBackend(BaseBackend):
     """
     def __init__(self, backend_url=settings.BACKEND_URL):
         super(DbBackend, self).__init__(backend_url)
-        self.engine = create_engine(backend_url, echo=settings.DEBUG)
-        db_session = sessionmaker(bind=self.engine)
-        self.session = db_session()
+        self._session = None
+
+    def establish_connection(self):
+        if self._connection:
+            return
+
+        self._connection = create_engine(self.backend_url)
+        self._connection.connect()
+
+    def close_connection(self):
+        """
+        关闭连接
+        :return:
+        """
+        if not self._connection:
+            return
+
+        self._connection.close()
+        self._session.close_all()
+        self._connection = None
+        self._session = None
+
+    def get_session(self):
+        if self._session:
+            return self._session
+
+        self.establish_connection()
+        session = sessionmaker(bind=self._connection)
+        self._session = session()
+        return self._session
 
     def get_task(self, task_id):
         try:
-            return self.session.query(Task).filter(Task.task_id == task_id).one()
+            return self.get_session().query(Task).filter(Task.task_id == task_id).one()
         except exc.MultipleResultsFound:
             return None
 
@@ -200,14 +232,20 @@ class DbBackend(BaseBackend):
         if not task_id_list:
             return []
 
-        return self.session.query(Task).filter(Task.task_id.in_([task_id_list])).all()
+        return self.get_session().query(Task).filter(Task.task_id.in_([task_id_list])).all()
 
     def _insert_task(self, task_id, status=TaskStatusEnum.CREATED.value, result=None, traceback=None):
         if not task_id or status not in TaskStatusEnum.all_values():
             return False
 
-        self.session.add(Task(task_id=task_id, status=status, result=result, _traceback=traceback))
-        self.session.commit()
+        if result is not None:
+            result = pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
+
+        if traceback is not None:
+            traceback = pickle.dumps(traceback, protocol=pickle.HIGHEST_PROTOCOL)
+
+        self.get_session().add(Task(task_id=task_id, status=status, _result=result, _traceback=traceback))
+        self.get_session().commit()
         return True
 
     def mark_task_success(self, task_id, result=None):
@@ -245,13 +283,13 @@ TYPE_2_BACKEND_CLS = {
 }
 
 
-def get_backend_by_settings():
+def get_backend_by_settings(type="database"):
     """
     获取backend
     :param type:
     :return:
     """
-    backend_cls = TYPE_2_BACKEND_CLS.get(settings.BACKEND_TYPE or "amqp")
+    backend_cls = TYPE_2_BACKEND_CLS.get(type, DbBackend)
     return backend_cls()
 
 

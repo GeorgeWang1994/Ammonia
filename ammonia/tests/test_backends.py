@@ -9,28 +9,21 @@
 @desc:      测试数据库连接
 """
 
-import unittest
-
 from ammonia.backends.backend import DbBackend
-from ammonia.backends.models import TaskStatusEnum, Task
+from ammonia.backends.models import TaskStatusEnum
+from ammonia.settings import TEST_CASE_BACKEND_URL
+from ammonia.tests.test_base import TestDBBackendBase
 from ammonia.utils import generate_random_uid
 
 
-class TestBase(unittest.TestCase):
-    def setUp(self):
-        # 创建表
-        self.backend = DbBackend('mysql+pymysql://root:123456@localhost/ammonia?charset=utf8')
-
-    def tearDown(self):
-        # 将表删除
-        self.backend.session.query(Task).filter().delete()
-        self.backend.session.commit()
-
-
-class TestDbBackend(TestBase):
+class TestDbBackend(TestDBBackendBase):
     """
     测试数据持久化
     """
+    def setUp(self):
+        super(TestDbBackend, self).setUp()
+        self.backend = DbBackend(TEST_CASE_BACKEND_URL)
+
     def test_insert_update_get_task(self):
         """
         测试插入更新任务
@@ -39,8 +32,10 @@ class TestDbBackend(TestBase):
         self.backend.mark_task_success(task_id=task_id1, result=100)
         result = self.backend.get_task(task_id1)
         self.assertEqual(result.status, TaskStatusEnum.SUCCESS.value)
+        self.assertEqual(result.result, 100)
 
         task_id2 = generate_random_uid()
         self.backend.mark_task_fail(task_id=task_id2, result={"error": "error"})
         result = self.backend.get_task(task_id2)
         self.assertEqual(result.status, TaskStatusEnum.FAIL.value)
+        self.assertEqual(result.traceback, {"error": "error"})

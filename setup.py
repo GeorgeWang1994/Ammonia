@@ -1,5 +1,7 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
+with open('requirements.txt', 'rb+') as f:
+    requirements = f.read().splitlines()
 
 setup(
     name="Ammonia",
@@ -8,7 +10,7 @@ setup(
     author="george wang",
     author_email="georgewang1994@163.com",
     url="https://github.com/GeorgeWang1994/Ammonia",
-    packages=find_packages(),
+    install_requires=requirements,
     classifiers=[
         'Development Status :: 4 - Beta',
         'Environsment :: Web Environment',
