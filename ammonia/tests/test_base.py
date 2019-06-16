@@ -14,7 +14,7 @@ from unittest import TestCase
 
 import sqlalchemy.exc as sqlalchemy_exc
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import close_all_sessions
 from sqlalchemy_utils import database_exists, create_database, drop_database
 
 from ammonia.backends.models import Base
@@ -37,8 +37,6 @@ class TestDBBackendBase(TestCase):
         with contextlib.suppress(sqlalchemy_exc.ProgrammingError):
             engine = create_engine(TEST_CASE_BACKEND_URL, encoding='utf-8', echo=True)
 
-            session = sessionmaker(bind=engine)
-            session = session()
-            session.close_all()
+            close_all_sessions()
             if database_exists(engine.url):
                 drop_database(TEST_CASE_BACKEND_URL)

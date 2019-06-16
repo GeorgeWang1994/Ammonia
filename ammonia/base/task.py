@@ -11,13 +11,10 @@
 
 import pickle
 
-from kombu import Connection
-
 from ammonia.backends.backend import default_backend
 from ammonia.base.registry import registry
 from ammonia.base.result import AsyncResult
-from ammonia.mq import TaskProducer, TaskConsumer
-from ammonia.settings import BROKER_CONNECTION_TIMEOUT, BACKEND_URL
+from ammonia.mq import TaskProducer, TaskConsumer, TaskExchange, TaskConnection
 from ammonia.state import TaskStatusEnum
 from ammonia.utils import generate_random_uid
 
@@ -44,7 +41,8 @@ class Task(object):
 
     @classmethod
     def get_task_producer(cls, channel, routing_key=None):
-        return TaskProducer(channel=channel, routing_key=routing_key)
+        exchange = TaskExchange(channel=channel)
+        return TaskProducer(channel=channel, routing_key=routing_key, exchange=exchange)
 
     @classmethod
     def get_task_consumer(cls, channel):
@@ -64,8 +62,8 @@ class Task(object):
         这里的参数是执行函数的参数，延迟执行
         :return:
         """
-        with Connection(hostname=BACKEND_URL, connect_timeout=BROKER_CONNECTION_TIMEOUT) as conn:
-            routing_key = getattr(self, "routing_key", default=None)
+        with TaskConnection() as conn:
+            routing_key = getattr(self, "routing_key", "")
             producer = self.get_task_producer(routing_key=routing_key, channel=conn.channel())
             producer.publish_task(pickle.dumps(self.data()))
             self.status = TaskStatusEnum.PREPARE.value

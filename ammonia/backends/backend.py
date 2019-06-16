@@ -290,7 +290,11 @@ def get_backend_by_settings(type="database"):
     :return:
     """
     backend_cls = TYPE_2_BACKEND_CLS.get(type, DbBackend)
-    return backend_cls()
+    if settings.DEBUG:
+        backend_url = settings.TEST_CASE_BACKEND_URL
+    else:
+        backend_url = settings.BACKEND_URL
+    return backend_cls(backend_url)
 
 
 default_backend = get_backend_by_settings()

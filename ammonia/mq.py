@@ -13,40 +13,35 @@ from kombu import Consumer, Producer, Connection, Exchange, Queue
 
 from ammonia import settings
 
-ROUTING_KEY = 'task'
-
 
 # ---------------------------------- task mq ---------------------------------- #
 
 
 class TaskConnection(Connection):
-    hostname = settings.BACKEND_URL
-
-
-task_connection = TaskConnection()
+    hostname = settings.TASK_URL
 
 
 class TaskExchange(Exchange):
-    def __init__(self, name=None, *args, **kwargs):
-        super(TaskExchange, self).__init__(name=name, channel=task_connection.channel(), *args, **kwargs)
+    def __init__(self, name=None, channel=None, *args, **kwargs):
+        super(TaskExchange, self).__init__(name=name, channel=channel, *args, **kwargs)
 
 
 class TaskQueue(Queue):
-    def __init__(self, name=None, routing_key=None, exchange=None, *args, **kwargs):
+    def __init__(self, name=None, routing_key=None, exchange=None, channel=None, *args, **kwargs):
         super(TaskQueue, self).__init__(
             name=name, exchange=exchange, routing_key=routing_key,
-            channel=task_connection.channel(), *args, **kwargs
+            channel=channel, *args, **kwargs
         )
 
 
 class TaskConsumer(Consumer):
     def __init__(self, channel=None, queues=None, *args, **kwargs):
-        super(TaskConsumer, self).__init__(channel=channel or task_connection.channel(), queues=queues, *args, **kwargs)
+        super(TaskConsumer, self).__init__(channel=channel, queues=queues, *args, **kwargs)
 
 
 class TaskProducer(Producer):
     def __init__(self, routing_key='', channel=None, exchange=None, *args, **kwargs):
-        super(TaskProducer, self).__init__(routing_key=routing_key, channel=channel or task_connection.channel(),
+        super(TaskProducer, self).__init__(routing_key=routing_key, channel=channel,
                                            exchange=exchange, *args, **kwargs)
 
     def publish_task(self, message):

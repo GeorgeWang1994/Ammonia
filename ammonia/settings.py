@@ -13,22 +13,19 @@
 # 是否正在调试
 DEBUG = True
 
-# 数据库主机名
+# 存储的主机名
 BACKEND_HOSTNAME = "localhost"
 
-# 数据库端口号
+# 存储的端口号
 BACKEND_PORT = "3306"
 
-# 数据库端用户名
+# 存储的用户名
 BACKEND_USER = "root"
 
-# 数据库端密码
+# 存储的密码
 BACKEND_PASSWORD = "123456"
 
-# 数据库编码
-BACKEND_ENCODING = "utf-8"
-
-# 数据库名字
+# 存储的数据库名字
 BACKEND_NAME = "ammonia"
 
 # 数据信息（数据库类型+数据库驱动名称）
@@ -37,10 +34,7 @@ BACKEND_TYPE = "mysql+pymysql"
 
 def get_backend_url(type=BACKEND_TYPE, user=BACKEND_USER, password=BACKEND_PASSWORD,
                     host=BACKEND_HOSTNAME, port=BACKEND_PORT, db_name=BACKEND_NAME):
-    return "{type}://{user}:{password}@{host}:{port}/{db_name}".format(
-        type=type, user=user, password=password, host=host,
-        port=port, db_name=db_name
-    )
+    return f"{type}://{user}:{password}@{host}:{port}/{db_name}"
 
 
 # 数据库URL(数据库类型+数据库驱动名称://用户名:口令@机器地址:端口号/数据库名)
@@ -54,3 +48,23 @@ TEST_CASE_BACKEND_URL = get_backend_url(db_name=TEST_CASE_BACKEND_NAME)
 
 # 连接超时时间
 BROKER_CONNECTION_TIMEOUT = 3
+
+
+# 任务对列的主机名
+TASK_HOSTNAME = "localhost"
+
+# 任务对列的端口号
+TASK_PORT = "5672"
+
+# 任务对列的用户名
+TASK_USER = "guest"
+
+# 任务对列的密码
+TASK_PASSWORD = "guest"
+
+# 数据信息
+TASK_TYPE = "amqp"
+
+
+# 任务对列的地址
+TASK_URL = f"{TASK_TYPE}://{TASK_USER}:{TASK_PASSWORD}@{TASK_HOSTNAME}:{TASK_PORT}//"

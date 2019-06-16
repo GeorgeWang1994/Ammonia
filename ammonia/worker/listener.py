@@ -27,8 +27,7 @@ class TaskListener(Thread):
         self._connection = None
 
     def establish_connection(self):
-        if self._connection:
-            self._connection.connect()
+        if self.task_consumer:
             return
 
         self._connection = TaskConnection()
@@ -37,10 +36,19 @@ class TaskListener(Thread):
         queues = [TaskQueue(routing_key="task_queue", channel=self._connection.channel(), exchange=exchange)]
         self.task_consumer = TaskConsumer(channel=self._connection.channel(), queues=queues)
 
+    def close_connection(self):
+        if not self._connection:
+            return
+
+        self._connection.close()
+        self._connection = None
+        self.task_consumer = None
+
     def start(self):
         while True:
             self.establish_connection()
             self.consume()
+            self.close_connection()
 
     def consume(self):
         """
@@ -51,6 +59,7 @@ class TaskListener(Thread):
             task_msg = self.task_consumer.qos()
             if task_msg:
                 self.ready_queue.put(task_msg)
+                break
             else:
                 time.sleep(1)
 

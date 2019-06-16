@@ -9,23 +9,31 @@
 @desc:      测试任务
 """
 
-from unittest import TestCase
+from ammonia.app import ammonia
+from ammonia.tests.test_base import TestDBBackendBase
 
-from ammonia.ammonia import Ammonia
 
-
-class TestTask(TestCase):
+class TestTask(TestDBBackendBase):
     def setUp(self):
-        pass
+        super().setUp()
 
     def test_basic_task_param(self):
         """
         测试基础的任务的参数的获取
         :return:
         """
-        @Ammonia.task(routing_key="task1")
+        @ammonia.task(routing_key="task")
         def get_sum(a, b):
             return a + b
 
+        # 直接调用
         result = get_sum(1, 2)
+        self.assertEqual(result, 3)
+
+        @ammonia.task(routing_key="task")
+        def get_sum2(a, b):
+            return a + b
+
+        async_result = get_sum2.defer(1, 2)
+        result = async_result.get()
         self.assertEqual(result, 3)
