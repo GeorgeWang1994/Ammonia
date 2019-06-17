@@ -50,21 +50,25 @@ TEST_CASE_BACKEND_URL = get_backend_url(db_name=TEST_CASE_BACKEND_NAME)
 BROKER_CONNECTION_TIMEOUT = 3
 
 
-# 任务对列的主机名
+# 任务队列的主机名
 TASK_HOSTNAME = "localhost"
 
-# 任务对列的端口号
+# 任务队列的端口号
 TASK_PORT = "5672"
 
-# 任务对列的用户名
+# 任务队列的用户名
 TASK_USER = "guest"
 
-# 任务对列的密码
+# 任务队列的密码
 TASK_PASSWORD = "guest"
 
 # 数据信息
 TASK_TYPE = "amqp"
 
 
-# 任务对列的地址
+# 任务队列的地址
 TASK_URL = f"{TASK_TYPE}://{TASK_USER}:{TASK_PASSWORD}@{TASK_HOSTNAME}:{TASK_PORT}//"
+
+
+# 任务队列路由key
+TASK_ROUTING_KEY = "task"

@@ -9,6 +9,7 @@
 @desc:      控制worker
 """
 
+import asyncio
 from queue import Queue
 
 from ammonia.base.task import TaskManager
@@ -26,9 +27,9 @@ class WorkerController(object):
         self.queue_listener = TaskQueueListener(ready_queue=self.ready_queue, process_callback=self.process_task)
         self.pool = AsyncPool(pool_worker_count)
         self.workers = (
-            self.listener,
             self.queue_listener,
             self.pool,
+            self.listener,
         )
 
     def process_task(self, task):
@@ -38,5 +39,17 @@ class WorkerController(object):
         """
         :return:
         """
-        for worker in self.workers:
-            worker.start()
+        try:
+            for worker in self.workers:
+                worker.start()
+        finally:
+            self.close()
+
+    def close(self):
+        for worker in reversed(self.workers):
+            if isinstance(worker, AsyncPool):
+                # 等待stop函数完成
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(worker.stop())
+            else:
+                worker.stop()

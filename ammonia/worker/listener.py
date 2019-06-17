@@ -8,20 +8,23 @@
 @contact:   georgewang1994@163.com
 @desc:      ...
 """
+import logging
 import time
 from queue import Empty
 from threading import Thread
 
 from ammonia.base.task import TaskManager, TaskConsumer
 from ammonia.mq import TaskConnection, TaskExchange, TaskQueue
+from ammonia.settings import TASK_ROUTING_KEY
+
+logger = logging.getLogger(__name__)
 
 
-class TaskListener(Thread):
+class TaskListener(object):
     """
     负责监听consumer，将consumer中的消息给取出来
     """
     def __init__(self, ready_queue, *args, **kwargs):
-        super(TaskListener, self).__init__(name="task_listener", target=self.consume, *args, **kwargs)
         self.task_consumer = None
         self.ready_queue = ready_queue
         self._connection = None
@@ -33,7 +36,7 @@ class TaskListener(Thread):
         self._connection = TaskConnection()
         self._connection.connect()
         exchange = TaskExchange(channel=self._connection.channel())
-        queues = [TaskQueue(routing_key="task_queue", channel=self._connection.channel(), exchange=exchange)]
+        queues = [TaskQueue(routing_key=TASK_ROUTING_KEY, channel=self._connection.channel(), exchange=exchange)]
         self.task_consumer = TaskConsumer(channel=self._connection.channel(), queues=queues)
 
     def close_connection(self):
@@ -42,6 +45,7 @@ class TaskListener(Thread):
 
         self._connection.close()
         self._connection = None
+        self.task_consumer.close()
         self.task_consumer = None
 
     def start(self):
@@ -50,11 +54,16 @@ class TaskListener(Thread):
             self.consume()
             self.close_connection()
 
+    def stop(self):
+        self.close_connection()
+
     def consume(self):
         """
         消费消息
         :return:
         """
+        print("task listener")
+        logging.info("task queue start...")
         while True:
             task_msg = self.task_consumer.qos()
             if task_msg:
@@ -78,6 +87,8 @@ class TaskQueueListener(Thread):
         消费消息
         :return:
         """
+        print("task queue listener")
+        logging.info("task queue listener start...")
         while True:
             try:
                 task_msg = self.ready_queue.get(timeout=1)
@@ -87,3 +98,6 @@ class TaskQueueListener(Thread):
                     self.ready_queue.task_done()
             except Empty:
                 pass
+
+    def stop(self):
+        self.join()

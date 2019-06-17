@@ -9,8 +9,6 @@
 @desc:      任务结果封装
 """
 
-from ammonia.base.registry import registry
-
 
 class AsyncResult(object):
     def __init__(self, task_id, backend):
@@ -22,10 +20,6 @@ class AsyncResult(object):
         从backend中异步获取task_id对应的结果
         :return:
         """
-        task = registry.get(self.task_id)
-        if not task:
-            raise Exception("找不到任务 %s" % self.task_id)
-
         is_success, result = self.backend.get_task_result(self.task_id, timeout)
         if not is_success:
             raise Exception("获取不到任务 %s 的结果" % self.task_id)
