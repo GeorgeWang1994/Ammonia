@@ -33,6 +33,7 @@ class WorkerController(object):
         )
 
     def process_task(self, task):
+        print("开始处理消息%s" % task.id)
         TaskManager.execute_task(self.pool, task)
 
     def start(self):

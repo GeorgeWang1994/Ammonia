@@ -9,6 +9,7 @@
 @desc:      测试任务
 """
 
+from ammonia import settings
 from ammonia.app import ammonia
 from ammonia.tests.test_base import TestDBBackendBase
 
@@ -22,7 +23,7 @@ class TestTask(TestDBBackendBase):
         测试基础的任务的参数的获取
         :return:
         """
-        @ammonia.task(routing_key="task")
+        @ammonia.task(routing_key=settings.LOW_TASK_ROUTING_KEY)
         def get_sum(a, b):
             return a + b
 
@@ -30,10 +31,10 @@ class TestTask(TestDBBackendBase):
         result = get_sum(1, 2)
         self.assertEqual(result, 3)
 
-        @ammonia.task(routing_key="task")
+        @ammonia.task(routing_key=settings.LOW_TASK_ROUTING_KEY)
         def get_sum2(a, b):
             return a + b
 
         async_result = get_sum2.defer(1, 2)
-        result = async_result.get()
+        result = async_result.get(timeout=3)
         self.assertEqual(result, 3)

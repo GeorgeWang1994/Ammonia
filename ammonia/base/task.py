@@ -9,12 +9,13 @@
 @desc:      任务相关的类
 """
 
-import pickle
+import random
 
+from ammonia import settings
 from ammonia.backends.backend import default_backend
 from ammonia.base.registry import registry
 from ammonia.base.result import AsyncResult
-from ammonia.mq import TaskProducer, TaskConsumer, TaskExchange, TaskConnection
+from ammonia.mq import TaskProducer, TaskConnection, task_exchange, task_queues
 from ammonia.state import TaskStatusEnum
 from ammonia.utils import generate_random_uid
 
@@ -41,12 +42,7 @@ class Task(object):
 
     @classmethod
     def get_task_producer(cls, channel, routing_key=None):
-        exchange = TaskExchange(channel=channel)
-        return TaskProducer(channel=channel, routing_key=routing_key, exchange=exchange)
-
-    @classmethod
-    def get_task_consumer(cls, channel):
-        return TaskConsumer(channel=channel)
+        return TaskProducer(channel=channel, routing_key=routing_key, exchange=task_exchange, serializer='json')
 
     def data(self):
         return {
@@ -64,8 +60,12 @@ class Task(object):
         """
         with TaskConnection() as conn:
             routing_key = getattr(self, "routing_key", "")
-            producer = self.get_task_producer(routing_key=routing_key, channel=conn.channel())
-            producer.publish_task(pickle.dumps(self.data()))
+            if not routing_key:
+                routing_key = random.choice(settings.TASK_ROUTING_KEY_LIST)
+            print("发送消息给路由%s %s" % (routing_key, self.data()))
+            producer = self.get_task_producer(channel=conn, routing_key=routing_key)
+            producer.publish_task(self.data(), routing_key=routing_key,
+                                  exchange=task_exchange, declare=task_queues)
             self.status = TaskStatusEnum.PREPARE.value
             return AsyncResult(task_id=self.task_id, backend=self.backend)
 
@@ -96,7 +96,7 @@ class TaskManager(object):
 
         args = message_data.pop("args", ())
         kwargs = message_data.pop("kwargs", {})
-        task = Task(exec_func=exec_func, *args, **kwargs)
+        task = Task(*args, **kwargs)
         return task
 
     def create_task_class(self, **kwargs):

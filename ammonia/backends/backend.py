@@ -106,12 +106,12 @@ class MQBackend(BaseBackend):
     def producer(self, task_id):
         self.establish_connection()
 
-        return BackendProducer(channel=self._connection.channel(), routing_key=task_id)
+        return BackendProducer(channel=self._connection, routing_key=task_id)
 
     def consumer(self, task_id, task_callback):
         self.establish_connection()
 
-        return BackendConsumer(routing_key=task_id, callbacks=task_callback, channel=self._connection.channel())
+        return BackendConsumer(routing_key=task_id, callbacks=task_callback, channel=self._connection)
 
     def _insert_task(self, task_id, status=TaskStatusEnum.CREATED.value, result=None, traceback=None):
         if not task_id or status not in TaskStatusEnum:
@@ -225,7 +225,7 @@ class DbBackend(BaseBackend):
     def get_task(self, task_id):
         try:
             return self.get_session().query(Task).filter(Task.task_id == task_id).one()
-        except exc.MultipleResultsFound:
+        except (exc.MultipleResultsFound, exc.NoResultFound):
             return None
 
     def get_tasks_by_ids(self, task_id_list):
@@ -262,19 +262,34 @@ class DbBackend(BaseBackend):
         self._insert_task(task_id=task_id, status=TaskStatusEnum.FAIL.value, traceback=result)
         return True
 
+    def _get_task_result(self, task_id):
+        task = self.get_task(task_id)
+        if not task:
+            return False, None
+
+        if task.status == TaskStatusEnum.FAIL.value:
+            return True, task.traceback
+
+        return True, task.result
+
     def get_task_result(self, task_id, timeout=None):
         if not task_id:
             return False, None
 
+        sleep_time = 0
         while True:
-            task = self.get_task(task_id)
-            if not task:
-                return False, None
+            success, result = self._get_task_result(task_id)
+            if success:
+                return True, result
 
-            if task.status == TaskStatusEnum.FAIL.value:
-                return True, task.traceback
+            if timeout is None:
+                return True, None
 
-            return True, task.result
+            if timeout and sleep_time >= timeout:
+                return True, None
+
+            time.sleep(1)
+            sleep_time += 1
 
 
 TYPE_2_BACKEND_CLS = {

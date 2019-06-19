@@ -22,7 +22,7 @@ class AsyncResult(object):
         """
         is_success, result = self.backend.get_task_result(self.task_id, timeout)
         if not is_success:
-            raise Exception("获取不到任务 %s 的结果" % self.task_id)
+            return result
 
         return result
 

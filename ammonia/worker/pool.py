@@ -29,7 +29,7 @@ class AsyncPool(object):
 
     def start(self):
         logger.info("async pool start...")
-        print("pool")
+        print("async pool start...")
         self._workers = [asyncio.ensure_future(self._worker(), loop=self.loop) for _ in range(self.worker_count)]
 
     async def __aenter__(self):

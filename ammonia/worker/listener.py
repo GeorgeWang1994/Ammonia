@@ -6,18 +6,30 @@
 @datetime:  2019-05-25
 @file:      listener.py
 @contact:   georgewang1994@163.com
-@desc:      ...
+@desc:      起线程负责监听消息
 """
+
 import logging
 import time
 from queue import Empty
 from threading import Thread
 
-from ammonia.base.task import TaskManager, TaskConsumer
-from ammonia.mq import TaskConnection, TaskExchange, TaskQueue
-from ammonia.settings import TASK_ROUTING_KEY
+from kombu.mixins import ConsumerMixin
+
+from ammonia.base.task import TaskManager
+from ammonia.mq import TaskConnection, TaskConsumer, task_queues
 
 logger = logging.getLogger(__name__)
+
+
+class TaskConsumerWorker(ConsumerMixin):
+    def __init__(self, connection, on_task_message):
+        self.connection = connection
+        self.on_task_message = on_task_message
+
+    def get_consumers(self, Consumer, channel):
+        return [TaskConsumer(channel=self.connection, queues=task_queues,
+                             prefetch_count=1, callbacks=[self.on_task_message])]
 
 
 class TaskListener(object):
@@ -35,9 +47,8 @@ class TaskListener(object):
 
         self._connection = TaskConnection()
         self._connection.connect()
-        exchange = TaskExchange(channel=self._connection.channel())
-        queues = [TaskQueue(routing_key=TASK_ROUTING_KEY, channel=self._connection.channel(), exchange=exchange)]
-        self.task_consumer = TaskConsumer(channel=self._connection.channel(), queues=queues)
+        # prefetch_count 保证每次consumer在同一时间只能获取一个消息
+        self.task_consumer = TaskConsumerWorker(self._connection, self.handle_task_message)
 
     def close_connection(self):
         if not self._connection:
@@ -45,14 +56,14 @@ class TaskListener(object):
 
         self._connection.close()
         self._connection = None
-        self.task_consumer.close()
+        self.task_consumer.should_stop = True
         self.task_consumer = None
 
     def start(self):
         while True:
+            self.close_connection()
             self.establish_connection()
             self.consume()
-            self.close_connection()
 
     def stop(self):
         self.close_connection()
@@ -62,15 +73,16 @@ class TaskListener(object):
         消费消息
         :return:
         """
-        print("task listener")
-        logging.info("task queue start...")
-        while True:
-            task_msg = self.task_consumer.qos()
-            if task_msg:
-                self.ready_queue.put(task_msg)
-                break
-            else:
-                time.sleep(1)
+        try:
+            print("TaskListener: 获取消息中...")
+            self.task_consumer.run()
+        except KeyboardInterrupt:
+            print("TaskListener: bye bye")
+
+    def handle_task_message(self, body, message):
+        print("TaskListener获取到消息%s" % body)
+        self.ready_queue.put(body)
+        message.ack()
 
 
 class TaskQueueListener(Thread):
@@ -87,16 +99,19 @@ class TaskQueueListener(Thread):
         消费消息
         :return:
         """
-        print("task queue listener")
+        print("task queue listener start...")
         logging.info("task queue listener start...")
         while True:
             try:
                 task_msg = self.ready_queue.get(timeout=1)
                 if task_msg:
+                    print("队列获取到消息%s" % task_msg)
                     task = TaskManager.to_task(task_msg)
                     self.process_callback(task)
                     self.ready_queue.task_done()
             except Empty:
+                print("TaskQueueListener: 等待消息中...")
+                time.sleep(1)
                 pass
 
     def stop(self):

@@ -34,6 +34,14 @@ class TaskQueue(Queue):
         )
 
 
+task_exchange = TaskExchange(name=settings.TASK_EXCHANGE_NAME)
+task_queues = [
+    TaskQueue(name=settings.HIGH_TASK_QUEUE_NAME, routing_key=settings.HIGH_TASK_ROUTING_KEY, exchange=task_exchange),
+    TaskQueue(name=settings.MID_TASK_QUEUE_NAME, routing_key=settings.MID_TASK_ROUTING_KEY, exchange=task_exchange),
+    TaskQueue(name=settings.LOW_TASK_QUEUE_NAME, routing_key=settings.LOW_TASK_ROUTING_KEY, exchange=task_exchange),
+]
+
+
 class TaskConsumer(Consumer):
     def __init__(self, channel=None, queues=None, *args, **kwargs):
         super(TaskConsumer, self).__init__(channel=channel, queues=queues, *args, **kwargs)
@@ -44,8 +52,8 @@ class TaskProducer(Producer):
         super(TaskProducer, self).__init__(routing_key=routing_key, channel=channel,
                                            exchange=exchange, *args, **kwargs)
 
-    def publish_task(self, message):
-        super(TaskProducer, self).publish(body=message)
+    def publish_task(self, message, routing_key, exchange, declare):
+        super(TaskProducer, self).publish(body=message, routing_key=routing_key, exchange=exchange, declare=declare)
 
 
 # ---------------------------------- backend mq ---------------------------------- #
