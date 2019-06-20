@@ -24,17 +24,19 @@ class WorkerController(object):
     def __init__(self, pool_worker_count=10):
         self.ready_queue = Queue()
         self.listener = TaskListener(ready_queue=self.ready_queue)
-        self.queue_listener = TaskQueueListener(ready_queue=self.ready_queue, process_callback=self.process_task)
-        self.pool = AsyncPool(pool_worker_count)
+        self.loop = asyncio.get_event_loop()
+        self.queue_listener = TaskQueueListener(ready_queue=self.ready_queue,
+                                                process_callback=self.process_task, loop=self.loop)
+        self.pool = AsyncPool(pool_worker_count, self.loop)
         self.workers = (
             self.queue_listener,
             self.pool,
             self.listener,
         )
 
-    def process_task(self, task):
-        print("开始处理消息%s" % task.id)
-        TaskManager.execute_task(self.pool, task)
+    async def process_task(self, task):
+        print("开始处理任务 %s" % task.task_id)
+        await TaskManager.execute_task(self.pool, task)
 
     def start(self):
         """

@@ -28,6 +28,7 @@ class Registry(object):
         :return:
         """
         self.cache[task.task_id] = task
+        print("注册成功 %s" % self.cache)
 
     def unregister(self, task):
         """

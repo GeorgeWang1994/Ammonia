@@ -45,35 +45,10 @@ import asyncio
 from ammonia.worker.pool import AsyncPool
 
 
-async def example_coro(initial_number, result_queue):
-    # 生产者
-    print("Processing Value! -> {} * 2 = {}".format(initial_number, initial_number))
-    await asyncio.sleep(1)
-    await result_queue.put(initial_number * 2)
-
-
-async def result_reader(queue):
-    # 消费者
-    while True:
-        value = await queue.get()
-        if value is None:
-            break
-        print("Got value! -> {}".format(value))
-
-
 async def run():
-
-    result_queue = asyncio.Queue()
-
-    #  创建任务
-    reader_future = asyncio.ensure_future(result_reader(result_queue), loop=loop)
-
-    #
     async with AsyncPool(10, loop) as pool:
         for i in range(50):
-            await pool.apply_async(example_coro, success_executor, fail_executor, i, result_queue)
-
-    await reader_future
+            await pool.apply_async(result_executor, success_executor, fail_executor, i)
 
 loop = asyncio.get_event_loop()
 

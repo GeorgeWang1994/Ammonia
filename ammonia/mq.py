@@ -53,7 +53,8 @@ class TaskProducer(Producer):
                                            exchange=exchange, *args, **kwargs)
 
     def publish_task(self, message, routing_key, exchange, declare):
-        super(TaskProducer, self).publish(body=message, routing_key=routing_key, exchange=exchange, declare=declare)
+        super(TaskProducer, self).publish(body=message, routing_key=routing_key, exchange=exchange, declare=declare,
+                                          serializer='pickle')
 
 
 # ---------------------------------- backend mq ---------------------------------- #

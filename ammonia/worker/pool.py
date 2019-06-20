@@ -23,7 +23,7 @@ class AsyncPool(object):
     """
     def __init__(self, worker_count, loop=None):
         self.worker_count = worker_count
-        self.loop = loop if loop else asyncio.get_event_loop()
+        self.loop = loop
         self.queue = asyncio.Queue(maxsize=self.worker_count)
         self._workers = []
 
@@ -56,12 +56,15 @@ class AsyncPool(object):
 
     async def _worker(self):
         while True:
+            print("pool worker 等待获取消息...")
             item = await self.queue.get()
 
+            print("pool worker running...")
             future, executor_func, args, kwargs = item
             try:
-                return_value = executor_func(*args, **kwargs)
-                future.set_result(return_value)
+                result_value = executor_func(*args, **kwargs)
+                print("获取到任务的结果:%s", result_value)
+                future.set_result(result_value)
             except (KeyboardInterrupt, MemoryError, SystemExit) as e:
                 future.set_exception(e)
                 raise
@@ -74,8 +77,9 @@ class AsyncPool(object):
         await self.queue.put((future, executor_func, args, kwargs))
         return future
 
-    def on_receive(self, success_callback, error_callback, future):
+    def on_receive(self, future, success_callback, error_callback):
         result_value = future.result()
+        print("获取到任务的结果:%s", result_value)
 
         if success_callback:
             success_callback(result_value)

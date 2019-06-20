@@ -17,7 +17,7 @@ from threading import Thread
 from kombu.mixins import ConsumerMixin
 
 from ammonia.base.task import TaskManager
-from ammonia.mq import TaskConnection, TaskConsumer, task_queues
+from ammonia.mq import TaskConnection, task_queues, TaskConsumer
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,8 @@ class TaskConsumerWorker(ConsumerMixin):
         self.on_task_message = on_task_message
 
     def get_consumers(self, Consumer, channel):
-        return [TaskConsumer(channel=self.connection, queues=task_queues,
-                             prefetch_count=1, callbacks=[self.on_task_message])]
+        return [TaskConsumer(channel=channel, queues=task_queues, prefetch_count=1, callbacks=[self.on_task_message],
+                             accept=['pickle', 'json'])]
 
 
 class TaskListener(object):
@@ -54,16 +54,15 @@ class TaskListener(object):
         if not self._connection:
             return
 
-        self._connection.close()
-        self._connection = None
         self.task_consumer.should_stop = True
         self.task_consumer = None
+        self._connection.close()
+        self._connection = None
 
     def start(self):
-        while True:
-            self.close_connection()
-            self.establish_connection()
-            self.consume()
+        self.close_connection()
+        self.establish_connection()
+        self.consume()
 
     def stop(self):
         self.close_connection()
@@ -78,9 +77,10 @@ class TaskListener(object):
             self.task_consumer.run()
         except KeyboardInterrupt:
             print("TaskListener: bye bye")
+            pass
 
     def handle_task_message(self, body, message):
-        print("TaskListener获取到消息%s" % body)
+        print("TaskListener: 获取到消息%s" % body)
         self.ready_queue.put(body)
         message.ack()
 
@@ -89,10 +89,11 @@ class TaskQueueListener(Thread):
     """
     负责监听ready_queue，将队列中的消息给取出来，加入到协程池
     """
-    def __init__(self, ready_queue, process_callback, *args, **kwargs):
+    def __init__(self, ready_queue, process_callback, loop, *args, **kwargs):
         super(TaskQueueListener, self).__init__(name="task_queue_listener", target=self.consume, *args, **kwargs)
         self.ready_queue = ready_queue
         self.process_callback = process_callback
+        self.loop = loop
 
     def consume(self):
         """
@@ -103,15 +104,18 @@ class TaskQueueListener(Thread):
         logging.info("task queue listener start...")
         while True:
             try:
-                task_msg = self.ready_queue.get(timeout=1)
+                task_msg = self.ready_queue.get()
                 if task_msg:
-                    print("队列获取到消息%s" % task_msg)
-                    task = TaskManager.to_task(task_msg)
-                    self.process_callback(task)
+                    print("TaskQueueListener: 获取到消息%s" % task_msg)
+                    from ammonia.base.registry import registry
+                    print("cache: %s" % registry.cache)
+                    task = TaskManager.task(task_msg["task_id"])
+                    print("task is %s" % task)
+                    self.loop.run_until_complete(self.process_callback(task))
                     self.ready_queue.task_done()
             except Empty:
                 print("TaskQueueListener: 等待消息中...")
-                time.sleep(1)
+                time.sleep(5)
                 pass
 
     def stop(self):
