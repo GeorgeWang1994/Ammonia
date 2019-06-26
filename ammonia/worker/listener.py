@@ -10,7 +10,6 @@
 """
 
 import logging
-import time
 from queue import Empty
 from threading import Thread
 
@@ -29,7 +28,7 @@ class TaskConsumerWorker(ConsumerMixin):
 
     def get_consumers(self, Consumer, channel):
         return [TaskConsumer(channel=channel, queues=task_queues, prefetch_count=1, callbacks=[self.on_task_message],
-                             accept=['pickle', 'json'])]
+                             accept=['pickle'])]
 
 
 class TaskListener(object):
@@ -104,19 +103,23 @@ class TaskQueueListener(Thread):
         logging.info("task queue listener start...")
         while True:
             try:
-                task_msg = self.ready_queue.get()
+                task_msg = self.ready_queue.get(timeout=1)
                 if task_msg:
                     print("TaskQueueListener: 获取到消息%s" % task_msg)
+                    task_manager = TaskManager(task_msg["task_id"])
+                    args, kwargs = task_msg["args"], task_msg["kwargs"]
                     from ammonia.base.registry import registry
-                    print("cache: %s" % registry.cache)
-                    task = TaskManager.task(task_msg["task_id"])
-                    print("task is %s" % task)
-                    self.loop.run_until_complete(self.process_callback(task))
+                    print("registry cache: %s:%s" % (id(registry.cache), registry.cache))
                     self.ready_queue.task_done()
+                    if not task_manager.task:
+                        print("task is None, stop running...")
+                        continue
+
+                    self.loop.run_until_complete(self.process_callback(task_manager.task, args, kwargs))
             except Empty:
                 print("TaskQueueListener: 等待消息中...")
-                time.sleep(5)
-                pass
+            except KeyboardInterrupt:
+                print("TaskQueueListener: bye bye")
 
     def stop(self):
         self.join()

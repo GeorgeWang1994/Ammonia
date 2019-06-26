@@ -34,9 +34,9 @@ class WorkerController(object):
             self.listener,
         )
 
-    async def process_task(self, task):
+    async def process_task(self, task, *args, **kwargs):
         print("开始处理任务 %s" % task.task_id)
-        await TaskManager.execute_task(self.pool, task)
+        await TaskManager.execute_task(self.pool, task, *args, **kwargs)
 
     def start(self):
         """

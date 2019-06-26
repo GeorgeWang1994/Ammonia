@@ -9,15 +9,14 @@
 @desc:      注册任务
 """
 
+from collections import UserDict
 
-class Registry(object):
+
+class Registry(UserDict):
     """
     任务注册
     """
     cache = {}
-
-    def __init__(self):
-        self._clean()
 
     def _clean(self):
         self.cache.clear()
@@ -28,7 +27,6 @@ class Registry(object):
         :return:
         """
         self.cache[task.task_id] = task
-        print("注册成功 %s" % self.cache)
 
     def unregister(self, task):
         """
@@ -43,7 +41,11 @@ class Registry(object):
         :param task_id:
         :return:
         """
-        return self.cache.get(task_id)
+        try:
+            return self.cache[task_id]
+        except KeyError:
+            print("task %s not found" % task_id)
+            pass
 
 
 registry = Registry()

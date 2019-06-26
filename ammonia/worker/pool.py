@@ -59,14 +59,15 @@ class AsyncPool(object):
             print("pool worker 等待获取消息...")
             item = await self.queue.get()
 
-            print("pool worker running...")
             future, executor_func, args, kwargs = item
+            print("future:[%s], executor_func:[%s], args:[%s], kwargs:[%s]" % (future, executor_func, args, kwargs))
             try:
                 result_value = executor_func(*args, **kwargs)
                 print("获取到任务的结果:%s", result_value)
                 future.set_result(result_value)
             except (KeyboardInterrupt, MemoryError, SystemExit) as e:
                 future.set_exception(e)
+                print("pool worker: bye bye")
                 raise
             finally:
                 self.queue.task_done()
