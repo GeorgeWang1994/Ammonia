@@ -12,6 +12,7 @@
 import asyncio
 from queue import Queue
 
+from ammonia.base.registry import task_registry
 from ammonia.base.task import TaskManager
 from ammonia.worker.listener import TaskListener, TaskQueueListener
 from ammonia.worker.pool import AsyncPool
@@ -34,7 +35,12 @@ class WorkerController(object):
             self.listener,
         )
 
-    async def process_task(self, task, *args, **kwargs):
+    async def process_task(self, task_id, *args, **kwargs):
+        task = task_registry.task(task_id)
+        if not task:
+            print("task is None, stop running...")
+            return
+
         print("开始处理任务 %s" % task.task_id)
         await TaskManager.execute_task(self.pool, task, *args, **kwargs)
 

@@ -15,7 +15,6 @@ from threading import Thread
 
 from kombu.mixins import ConsumerMixin
 
-from ammonia.base.task import TaskManager
 from ammonia.mq import TaskConnection, task_queues, TaskConsumer
 
 logger = logging.getLogger(__name__)
@@ -106,16 +105,14 @@ class TaskQueueListener(Thread):
                 task_msg = self.ready_queue.get(timeout=1)
                 if task_msg:
                     print("TaskQueueListener: 获取到消息%s" % task_msg)
-                    task_manager = TaskManager(task_msg["task_id"])
+                    task_id = task_msg["task_id"]
                     args, kwargs = task_msg["args"], task_msg["kwargs"]
-                    from ammonia.base.registry import registry
-                    print("registry cache: %s:%s" % (id(registry.cache), registry.cache))
                     self.ready_queue.task_done()
-                    if not task_manager.task:
+                    if not task_id:
                         print("task is None, stop running...")
                         continue
 
-                    self.loop.run_until_complete(self.process_callback(task_manager.task, args, kwargs))
+                    self.loop.run_until_complete(self.process_callback(task_id, args, kwargs))
             except Empty:
                 print("TaskQueueListener: 等待消息中...")
             except KeyboardInterrupt:

@@ -9,32 +9,12 @@
 @desc:      总控制
 """
 
-from ammonia.base.registry import registry
 from ammonia.base.task import TaskManager
-from ammonia.worker.controller import WorkerController
 
 
 class Ammonia(object):
-
-    def __init__(self):
-        self.worker_controller = WorkerController()
-
-    def run(self):
-        self.worker_controller.start()
-
-    def setup(self):
-        msg = "registry: %s" % registry
-        print(msg)
-
     @staticmethod
     def task(*args, **kwargs):
         def decorator(func):
             return TaskManager.create_task(func, *args, **kwargs)
         return decorator
-
-
-ammonia = Ammonia()
-
-if __name__ == '__main__':
-    ammonia.setup()
-    ammonia.run()

@@ -13,7 +13,7 @@ import random
 
 from ammonia import settings
 from ammonia.backends.backend import default_backend
-from ammonia.base.registry import registry
+from ammonia.base.registry import task_registry
 from ammonia.base.result import AsyncResult
 from ammonia.mq import TaskProducer, TaskConnection, task_exchange, task_queues
 from ammonia.state import TaskStatusEnum
@@ -77,7 +77,6 @@ class Task(object):
         :return:
         """
         self.status = TaskStatusEnum.PREPARE.value
-        print("client registry id", id(registry))
         # 如果是直接调用，则直接计算返回
         if is_immediate:
             return task_trace_execute(self, *args, **kwargs)
@@ -90,7 +89,6 @@ class TaskManager(object):
 
     def __init__(self, task_id, *args, **kwargs):
         self.task_id = task_id
-        self.task = registry.task(task_id)
 
     @classmethod
     def to_message(cls, task):
@@ -124,7 +122,7 @@ class TaskManager(object):
         task_id = generate_random_uid()
         task_cls = cls.create_task_class(execute_func)
         task = task_cls(task_id, *args, **kwargs)
-        registry.register(task)
+        task_registry.register(task)
         return task
 
     @classmethod
