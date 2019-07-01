@@ -11,11 +11,16 @@
 
 import sys
 
-from ammonia.bin import Worker, parse_options
+from ammonia.main import Worker, parse_options
 
-if __name__ == "__main__":
+
+def start():
     options = parse_options(sys.argv[1:])
     print("options is %s" % options)
     worker = Worker(**options)
     worker.setup()
     worker.run()
+
+
+if __name__ == "__main__":
+    start()

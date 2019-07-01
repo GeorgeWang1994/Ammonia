@@ -11,8 +11,8 @@
 
 from argparse import ArgumentParser
 
+from ammonia.base.loader import Loader
 from ammonia.worker.controller import WorkerController
-from tasks import *
 
 
 def parse_options(arguments):
@@ -20,7 +20,8 @@ def parse_options(arguments):
 
     parser = ArgumentParser(usage=usage)
 
-    parser.add_argument("-w", "--worker", dest="worker", default=10, type=int, help="运行worker的个数")
+    parser.add_argument("-w", "--worker", dest="worker_num", default=3, type=int, help="运行worker的个数")
+    parser.add_argument("-p", "--project", dest="project_name", type=str, help="项目名称")
 
     (options, args) = parser.parse_args(args=arguments)
     return options
@@ -28,11 +29,13 @@ def parse_options(arguments):
 
 class Worker(object):
 
-    def __init__(self, worker=10):
-        self.worker_controller = WorkerController(pool_worker_count=worker)
+    def __init__(self, worker_num=10, project_name=""):
+        self.project_name = project_name
+        self.worker_controller = WorkerController(pool_worker_count=worker_num)
+        self.loader = Loader()
 
     def setup(self):
-        print(get_sum)
+        self.loader.find_tasks(self.project_name)
 
     def run(self):
         self.worker_controller.start()

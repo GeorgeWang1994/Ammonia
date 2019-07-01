@@ -19,4 +19,9 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
     ],
+    entry_points={
+        'console_scripts': [
+            'ammonia:command.start'
+        ],
+    },
 )

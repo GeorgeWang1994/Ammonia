@@ -9,6 +9,8 @@
 @desc:      配置文件
 """
 
+import os
+
 
 # 是否正在调试
 DEBUG = True
@@ -84,3 +86,10 @@ TASK_ROUTING_KEY_LIST = [HIGH_TASK_ROUTING_KEY, MID_TASK_ROUTING_KEY, LOW_TASK_R
 
 # 任务交换器名字
 TASK_EXCHANGE_NAME = "task"
+
+
+# 项目路径
+BASE_PROJECT_PATH = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+
+# 获取任务模块的后缀名
+TASK_MODULE_SUFFIX = "tasks"
