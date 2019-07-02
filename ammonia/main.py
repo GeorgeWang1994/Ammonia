@@ -21,10 +21,15 @@ def parse_options(arguments):
     parser = ArgumentParser(usage=usage)
 
     parser.add_argument("-w", "--worker", dest="worker_num", default=3, type=int, help="运行worker的个数")
-    parser.add_argument("-p", "--project", dest="project_name", type=str, help="项目名称")
+    parser.add_argument("-p", "--project", dest="project_name", default="", type=str, help="项目名称")
 
-    (options, args) = parser.parse_args(args=arguments)
-    return options
+    args = parser.parse_args(args=arguments)
+    return args
+
+
+USAGE = """
+tasks: {tasks}
+"""
 
 
 class Worker(object):
@@ -35,7 +40,8 @@ class Worker(object):
         self.loader = Loader()
 
     def setup(self):
-        self.loader.find_tasks(self.project_name)
+        result = self.loader.find_tasks(self.project_name)
+        print(USAGE.format(tasks=result))
 
     def run(self):
         self.worker_controller.start()

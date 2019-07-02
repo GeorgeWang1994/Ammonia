@@ -10,6 +10,7 @@
 """
 
 import random
+import sys
 
 from ammonia import settings
 from ammonia.backends.backend import default_backend
@@ -21,9 +22,10 @@ from ammonia.utils import generate_random_uid
 
 
 class Task(object):
-    def __init__(self, task_id, *args, **kwargs):
+    def __init__(self, task_id, task_name, *args, **kwargs):
         # 这里的args和kwargs是函数的，而装饰器的参数则是类的参数
         self.task_id = task_id
+        self.task_name = task_name
         self.status = TaskStatusEnum.CREATED.value
         self.routing_key = getattr(self, "routing_key", "")
 
@@ -40,6 +42,7 @@ class Task(object):
     def data(self):
         return {
             "task_id": self.task_id,
+            "task_name": self.task_name,
             "status": self.status,
             "routing_key": self.routing_key,
         }
@@ -120,13 +123,21 @@ class TaskManager(object):
     @classmethod
     def create_task(cls, execute_func, *args, **kwargs):
         task_id = generate_random_uid()
+        task_module = sys.modules[execute_func.__module__]
+        task_name = ".".join([task_module.__name__, execute_func.__name__, ])
         task_cls = cls.create_task_class(execute_func)
-        task = task_cls(task_id, *args, **kwargs)
+        task = task_cls(task_id, task_name, *args, **kwargs)
         task_registry.register(task)
         return task
 
     @classmethod
-    async def execute_task(cls, pool, task, *args, **kwargs):
+    async def execute_task(cls, pool, task_name, *args, **kwargs):
+        task = task_registry.task(task_name)
+        if not task:
+            print("task is None, stop running...")
+            return
+
+        print("开始处理任务 task: %s, args: %s, kwargs: %s" % (task, args, kwargs))
         await pool.apply_async(task_trace_execute, cls.on_task_success, cls.on_task_fail, task, *args, **kwargs)
 
     @classmethod
@@ -149,7 +160,7 @@ class TaskTrace(object):
         self.task = task
 
     def execute(self, *args, **kwargs):
-        print("任务开始执行...")
+        print("任务开始执行 task: %s, args: %s, kwargs: %s" % (self.task, args, kwargs))
         try:
             result = self.do_exec_func(*args, **kwargs)
             print("任务执行成功, %s" % result)

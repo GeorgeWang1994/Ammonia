@@ -40,6 +40,7 @@ def get_sum(a, b):
 
         mod_list = loader.find_tasks(self.package_name)
         self.assertEqual(len(mod_list), 1)
+        self.assertEqual(mod_list[0].get_sum(1, 2), 3)
 
     def tearDown(self):
         shutil.rmtree(self.example_path)
