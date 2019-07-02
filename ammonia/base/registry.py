@@ -9,6 +9,8 @@
 @desc:      注册任务
 """
 
+from ammonia.exception import NotRegisterException
+
 
 class Registry(dict):
     """
@@ -39,9 +41,8 @@ class Registry(dict):
         """
         try:
             return self[task_id]
-        except KeyError:
-            print("task %s not found" % task_id)
-            pass
+        except NotRegisterException:
+            raise NotRegisterException(task_id)
 
 
 task_registry = Registry()

@@ -13,7 +13,7 @@ import os
 
 
 # 是否正在调试
-DEBUG = True
+DEBUG = False
 
 # 存储的主机名
 BACKEND_HOSTNAME = "localhost"
@@ -34,6 +34,10 @@ BACKEND_NAME = "ammonia"
 BACKEND_TYPE = "mysql+pymysql"
 
 
+# 连接超时时间
+BACKEND_CONNECTION_TIMEOUT = 3
+
+
 def get_backend_url(type=BACKEND_TYPE, user=BACKEND_USER, password=BACKEND_PASSWORD,
                     host=BACKEND_HOSTNAME, port=BACKEND_PORT, db_name=BACKEND_NAME):
     return f"{type}://{user}:{password}@{host}:{port}/{db_name}"
@@ -49,7 +53,7 @@ TEST_CASE_BACKEND_NAME = f"test_{BACKEND_NAME}"
 TEST_CASE_BACKEND_URL = get_backend_url(db_name=TEST_CASE_BACKEND_NAME)
 
 # 连接超时时间
-BROKER_CONNECTION_TIMEOUT = 3
+TASK_CONNECTION_TIMEOUT = 3
 
 
 # 任务队列的主机名
@@ -70,6 +74,11 @@ TASK_TYPE = "amqp"
 
 # 任务队列的地址
 TASK_URL = f"{TASK_TYPE}://{TASK_USER}:{TASK_PASSWORD}@{TASK_HOSTNAME}:{TASK_PORT}//"
+
+
+def get_task_url(type=TASK_TYPE, user=TASK_USER, password=TASK_PASSWORD,
+                 host=TASK_HOSTNAME, port=TASK_PORT):
+    return f"{type}://{user}:{password}@{host}:{port}//"
 
 
 # 任务队列名

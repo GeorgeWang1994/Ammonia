@@ -64,9 +64,6 @@ class BackendConnection(Connection):
     hostname = settings.BACKEND_URL
 
 
-backend_connection = BackendConnection()
-
-
 class BackendExchange(Exchange):
     def __init__(self, channel=None, *args, **kwargs):
         # 默认参数durable为True，auto_delete=False，保证持久化

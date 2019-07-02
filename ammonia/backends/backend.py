@@ -12,12 +12,13 @@
 import pickle
 import time
 
+from redis import Redis
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, exc
 
 from ammonia import settings
 from ammonia.backends.models import Task
-from ammonia.mq import backend_connection, BackendConsumer, BackendProducer
+from ammonia.mq import BackendConnection, BackendConsumer, BackendProducer
 from ammonia.state import TaskStatusEnum
 
 # 队列名字
@@ -28,8 +29,9 @@ EXCHANGE_NAME = "backend_exchange"
 
 
 class BaseBackend(object):
-    def __init__(self, backend_url):
+    def __init__(self, backend_url, timeout=None):
         self.backend_url = backend_url
+        self.timeout = timeout
         self._connection = None
 
     def mark_task_success(self, task_id, result=None):
@@ -80,16 +82,16 @@ class MQBackend(BaseBackend):
     """
     利用mq自身功能实现消息持久化
     """
-    def __init__(self, backend_url=settings.BACKEND_URL):
-        super(MQBackend, self).__init__(backend_url=backend_url)
-        self.backend_url = backend_url
+    def __init__(self, backend_url=settings.BACKEND_URL, timeout=None):
+        super(MQBackend, self).__init__(backend_url=backend_url, timeout=timeout)
 
     def establish_connection(self):
         if self._connection:
             return
 
         if not self._connection:
-            self._connection = backend_connection
+            self._connection = BackendConnection(hostname=self.backend_url,
+                                                 connect_timeout=self.timeout)
             self._connection.connect()
 
         return self._connection
@@ -189,15 +191,15 @@ class DbBackend(BaseBackend):
     """
     利用数据库实现消息持久化
     """
-    def __init__(self, backend_url=settings.BACKEND_URL):
-        super(DbBackend, self).__init__(backend_url)
+    def __init__(self, backend_url=settings.BACKEND_URL, timeout=None):
+        super(DbBackend, self).__init__(backend_url=backend_url, timeout=timeout)
         self._session = None
 
     def establish_connection(self):
         if self._connection:
             return
 
-        self._connection = create_engine(self.backend_url)
+        self._connection = create_engine(self.backend_url, pool_timeout=self.timeout)
         self._connection.connect()
 
     def close_connection(self):
@@ -240,8 +242,7 @@ class DbBackend(BaseBackend):
 
         if result is not None:
             result = pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
-
-        if traceback is not None:
+        elif traceback is not None:
             traceback = pickle.dumps(traceback, protocol=pickle.HIGHEST_PROTOCOL)
 
         self.get_session().add(Task(task_id=task_id, status=status, _result=result, _traceback=traceback))
@@ -292,9 +293,88 @@ class DbBackend(BaseBackend):
             sleep_time += 1
 
 
+class RedisBackend(BaseBackend):
+    """
+    使用redis进行持久化
+    """
+    def __init__(self, backend_url=settings.BACKEND_URL, timeout=None):
+        super(RedisBackend, self).__init__(backend_url=backend_url, timeout=timeout)
+
+    def establish_connection(self):
+        if self._connection:
+            return
+
+        # todo: redis中不允许直接传URL，需要进行解析
+        self._connection = Redis(host="localhost", socket_connect_timeout=self.timeout)
+
+    def close_connection(self):
+        """
+        关闭连接
+        :return:
+        """
+        if not self._connection:
+            return
+
+        self._connection = None
+
+    def _save_task(self, task_id, status, result=None, traceback=None):
+        if not task_id or status not in TaskStatusEnum.all_values():
+            return False
+
+        if result is not None:
+            result = pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
+        elif traceback is not None:
+            result = pickle.dumps(traceback, protocol=pickle.HIGHEST_PROTOCOL)
+
+        self._connection.lpush(task_id, result)
+        return True
+
+    def mark_task_success(self, task_id, result=None):
+        """
+        标记任务为已经完成
+        :param task_id:
+        :param result:
+        :param trace:
+        :return:
+        """
+        if not self._connection:
+            self.establish_connection()
+
+        return self._save_task(task_id, TaskStatusEnum.SUCCESS.value, result=result)
+
+    def mark_task_fail(self, task_id, result=None):
+        """
+        标记任务为失败
+        :param task_id:
+        :param result:
+        :param trace:
+        :return:
+        """
+        if not self._connection:
+            self.establish_connection()
+
+        return self._save_task(task_id, TaskStatusEnum.FAIL.value, traceback=result)
+
+    def get_task_result(self, task_id, timeout=None):
+        """
+        返回任务的结果
+        :param task_id:
+        :param timeout: 阻塞时间（None表示不阻塞直接拿，0表示无限阻塞，其余为阻塞秒数）
+        :return:
+        """
+        if not self._connection:
+            self.establish_connection()
+        # 不用轮询的方式是因为在列表可能经常为空的情况下会导致多次请求
+        result = self._connection.blpop([task_id], timeout=timeout)
+        if result:
+            return pickle.loads(result[1])
+        return
+
+
 TYPE_2_BACKEND_CLS = {
     'amqp': MQBackend,
     'database': DbBackend,
+    'redis': RedisBackend,
 }
 
 
@@ -304,12 +384,4 @@ def get_backend_by_settings(type="database"):
     :param type:
     :return:
     """
-    backend_cls = TYPE_2_BACKEND_CLS.get(type, DbBackend)
-    if settings.DEBUG:
-        backend_url = settings.TEST_CASE_BACKEND_URL
-    else:
-        backend_url = settings.BACKEND_URL
-    return backend_cls(backend_url)
-
-
-default_backend = get_backend_by_settings()
+    return TYPE_2_BACKEND_CLS.get(type, DbBackend)

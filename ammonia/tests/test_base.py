@@ -17,8 +17,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import close_all_sessions
 from sqlalchemy_utils import database_exists, create_database, drop_database
 
+from ammonia.app import Ammonia
 from ammonia.backends.models import Base
 from ammonia.settings import TEST_CASE_BACKEND_URL
+
+ammonia = Ammonia()
 
 
 class TestDBBackendBase(TestCase):

@@ -13,9 +13,10 @@ import random
 import sys
 
 from ammonia import settings
-from ammonia.backends.backend import default_backend
+from ammonia.backends.backend import get_backend_by_settings
 from ammonia.base.registry import task_registry
 from ammonia.base.result import AsyncResult
+from ammonia.exception import ExecuteTaskException
 from ammonia.mq import TaskProducer, TaskConnection, task_exchange, task_queues
 from ammonia.state import TaskStatusEnum
 from ammonia.utils import generate_random_uid
@@ -29,7 +30,9 @@ class Task(object):
         self.status = TaskStatusEnum.CREATED.value
         self.routing_key = getattr(self, "routing_key", "")
 
-        self.backend = default_backend
+        from ammonia.app import Ammonia
+        backend_cls = get_backend_by_settings(Ammonia.conf["BACKEND_TYPE"])
+        self.backend = backend_cls(Ammonia.conf["BACKEND_URL"])
         self.result = None
 
     def execute(self):
@@ -52,7 +55,9 @@ class Task(object):
         这里的参数是执行函数的参数，延迟执行
         :return:
         """
-        with TaskConnection() as conn:
+        from ammonia.app import Ammonia
+        with TaskConnection(hostname=Ammonia.conf["TASK_URL"],
+                            connect_timeout=Ammonia.conf["TASK_CONNECTION_TIMEOUT"]) as conn:
             # 如果路由不存在则随机路由
             if not self.routing_key:
                 self.routing_key = random.choice(settings.TASK_ROUTING_KEY_LIST)
@@ -166,8 +171,7 @@ class TaskTrace(object):
             print("任务执行成功, %s" % result)
             self.do_exec_success(result)
             return result
-        except Exception as e:
-            print("任务执行失败, %s" % e)
+        except ExecuteTaskException as e:
             self.do_exec_fail(e)
             return None
 

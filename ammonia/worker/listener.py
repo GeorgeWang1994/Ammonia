@@ -40,10 +40,12 @@ class TaskListener(object):
         self._connection = None
 
     def establish_connection(self):
+        from ammonia.app import Ammonia
         if self.task_consumer:
             return
 
-        self._connection = TaskConnection()
+        self._connection = TaskConnection(hostname=Ammonia.conf["TASK_URL"],
+                                          connect_timeout=Ammonia.conf["BACKEND_CONNECTION_TIMEOUT"])
         self._connection.connect()
         # prefetch_count 保证每次consumer在同一时间只能获取一个消息
         self.task_consumer = TaskConsumerWorker(self._connection, self.handle_task_message)

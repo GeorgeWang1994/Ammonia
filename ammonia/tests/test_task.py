@@ -10,11 +10,7 @@
 """
 
 from ammonia import settings
-from ammonia.app import Ammonia
-from ammonia.tests.test_base import TestDBBackendBase
-
-
-ammonia = Ammonia()
+from ammonia.tests.test_base import TestDBBackendBase, ammonia
 
 
 @ammonia.task(routing_key=settings.LOW_TASK_ROUTING_KEY)
