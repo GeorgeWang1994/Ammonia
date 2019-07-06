@@ -102,3 +102,6 @@ BASE_PROJECT_PATH = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
 # 获取任务模块的后缀名
 TASK_MODULE_SUFFIX = "tasks"
+
+# 是否是测试用例
+IS_FOR_TEST_CASE = False

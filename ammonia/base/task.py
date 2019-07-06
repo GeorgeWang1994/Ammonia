@@ -13,26 +13,20 @@ import random
 import sys
 
 from ammonia import settings
-from ammonia.backends.backend import get_backend_by_settings
 from ammonia.base.registry import task_registry
 from ammonia.base.result import AsyncResult
-from ammonia.exception import ExecuteTaskException
 from ammonia.mq import TaskProducer, TaskConnection, task_exchange, task_queues
 from ammonia.state import TaskStatusEnum
-from ammonia.utils import generate_random_uid
 
 
 class Task(object):
-    def __init__(self, task_id, task_name, *args, **kwargs):
+    def __init__(self, task_id, backend, *args, **kwargs):
         # 这里的args和kwargs是函数的，而装饰器的参数则是类的参数
         self.task_id = task_id
-        self.task_name = task_name
         self.status = TaskStatusEnum.CREATED.value
         self.routing_key = getattr(self, "routing_key", "")
-
-        from ammonia.app import Ammonia
-        backend_cls = get_backend_by_settings(Ammonia.conf["BACKEND_TYPE"])
-        self.backend = backend_cls(Ammonia.conf["BACKEND_URL"])
+        self.retry = getattr(self, "retry", 0)
+        self.backend = backend
         self.result = None
 
     def execute(self):
@@ -45,9 +39,9 @@ class Task(object):
     def data(self):
         return {
             "task_id": self.task_id,
-            "task_name": self.task_name,
             "status": self.status,
             "routing_key": self.routing_key,
+            "retry": self.retry,
         }
 
     def defer_async(self, *args, **kwargs):
@@ -74,6 +68,9 @@ class Task(object):
 
     def __call__(self, *args, **kwargs):
         return self._process_task(True, *args, **kwargs)
+
+    def __str__(self):
+        return "task[%s-%s]" % (self.task_id, self.status)
 
     def defer(self, *args, **kwargs):
         return self._process_task(False, *args, **kwargs)
@@ -126,18 +123,17 @@ class TaskManager(object):
         return type(execute_func.__name__, (TaskManager.base_task_class,), task_settings)
 
     @classmethod
-    def create_task(cls, execute_func, *args, **kwargs):
-        task_id = generate_random_uid()
+    def create_task(cls, execute_func, backend, *args, **kwargs):
         task_module = sys.modules[execute_func.__module__]
-        task_name = ".".join([task_module.__name__, execute_func.__name__, ])
-        task_cls = cls.create_task_class(execute_func)
-        task = task_cls(task_id, task_name, *args, **kwargs)
+        task_id = ".".join([task_module.__name__, execute_func.__name__, ])
+        task_cls = cls.create_task_class(execute_func, **kwargs)
+        task = task_cls(task_id, backend, *args, **kwargs)
         task_registry.register(task)
         return task
 
     @classmethod
-    async def execute_task(cls, pool, task_name, *args, **kwargs):
-        task = task_registry.task(task_name)
+    async def execute_task(cls, pool, task_id, *args, **kwargs):
+        task = task_registry.task(task_id)
         if not task:
             print("task is None, stop running...")
             return
@@ -164,16 +160,39 @@ class TaskTrace(object):
     def __init__(self, task):
         self.task = task
 
-    def execute(self, *args, **kwargs):
-        print("任务开始执行 task: %s, args: %s, kwargs: %s" % (self.task, args, kwargs))
+    def _execute(self, *args, **kwargs):
         try:
             result = self.do_exec_func(*args, **kwargs)
             print("任务执行成功, %s" % result)
-            self.do_exec_success(result)
-            return result
-        except ExecuteTaskException as e:
-            self.do_exec_fail(e)
-            return None
+            return True, result
+        except Exception as e:
+            error = e.args[0]
+            return False, error
+
+    def execute(self, *args, **kwargs):
+        print("任务开始执行 task: %s, args: %s, kwargs: %s" % (self.task, args, kwargs))
+        retry_num = self.task.retry
+        result = None
+        
+        if retry_num:
+            while retry_num:
+                success, result = self._execute(*args, **kwargs)
+                if success:
+                    self.do_exec_success(result)
+                    return result
+                retry_num -= 1
+        else:
+            success, result = self._execute(*args, **kwargs)
+            if success:
+                self.do_exec_success(result)
+                return result
+
+        # 记录到数据库中
+        if self.task.retry:
+            self.do_exec_retry(result)
+        else:
+            self.do_exec_fail(result)
+        return None
 
     def do_exec_func(self, *args, **kwargs):
         self.task.status = TaskStatusEnum.PROCESS.value
@@ -187,6 +206,10 @@ class TaskTrace(object):
     def do_exec_fail(self, return_value):
         self.task.status = TaskStatusEnum.FAIL.value
         self.task.backend.mark_task_fail(task_id=self.task.task_id, result=return_value)
+
+    def do_exec_retry(self, return_value):
+        self.task.status = TaskStatusEnum.RETRY.value
+        self.task.backend.mark_task_retry(task_id=self.task.task_id, result=return_value)
 
 
 def task_trace_execute(task, *args, **kwargs):

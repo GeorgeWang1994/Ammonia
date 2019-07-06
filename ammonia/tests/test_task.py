@@ -10,11 +10,18 @@
 """
 
 from ammonia import settings
+from ammonia.base.registry import task_registry
+from ammonia.state import TaskStatusEnum
 from ammonia.tests.test_base import TestDBBackendBase, ammonia
 
 
 @ammonia.task(routing_key=settings.LOW_TASK_ROUTING_KEY)
-def get_sum(a, b):
+def test_basic_task_param_func(a, b):
+    return a + b
+
+
+@ammonia.task(retry=3)
+def test_task_retry_func(a, b):
     return a + b
 
 
@@ -28,5 +35,19 @@ class TestTask(TestDBBackendBase):
         :return:
         """
         # 直接调用
-        result = get_sum(1, 2)
+        result = test_basic_task_param_func(1, 2)
         self.assertEqual(result, 3)
+
+        task = task_registry.get('test_task.test_basic_task_param_func')
+        self.assertEqual(task.status, TaskStatusEnum.SUCCESS.value)
+
+    def test_task_try(self):
+        """
+        测试任务重试
+        :return:
+        """
+        result = test_task_retry_func(1, "2")
+        self.assertEqual(result, None)
+
+        task = task_registry.get('test_task.test_task_retry_func')
+        self.assertEqual(task.status, TaskStatusEnum.RETRY.value)

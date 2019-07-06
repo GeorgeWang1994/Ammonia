@@ -24,8 +24,7 @@ Base = declarative_base()
 class Task(Base):
     __tablename__ = "task"
 
-    task_id = Column(String(50), primary_key=True, comment=u"任务id")
-    task_name = Column(String(300), default="", comment=u"任务名字")
+    task_id = Column(String(100), primary_key=True, comment=u"任务id")
     status = Column(String(50), comment=u"任务当前的状态", nullable=False, default=TaskStatusEnum.CREATED.value)
     _result = Column(BLOB, comment=u"任务执行的结果", default=b"", nullable=True)
     _traceback = Column(BLOB, comment=u"报错信息", default=b"", nullable=True)

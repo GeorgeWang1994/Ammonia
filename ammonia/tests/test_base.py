@@ -17,29 +17,29 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import close_all_sessions
 from sqlalchemy_utils import database_exists, create_database, drop_database
 
+from ammonia import settings
 from ammonia.app import Ammonia
 from ammonia.backends.models import Base
-from ammonia.settings import TEST_CASE_BACKEND_URL
 
-ammonia = Ammonia()
+ammonia = Ammonia(conf={"BACKEND_URL": settings.TEST_CASE_BACKEND_URL})
 
 
 class TestDBBackendBase(TestCase):
-    # todo: 封装成装饰器
     def setUp(self):
         with contextlib.suppress(sqlalchemy_exc.ProgrammingError):
-            engine = create_engine(TEST_CASE_BACKEND_URL, encoding='utf-8', echo=True)
+            engine = create_engine(settings.TEST_CASE_BACKEND_URL, encoding='utf-8', echo=True)
 
             if database_exists(engine.url):
-                drop_database(TEST_CASE_BACKEND_URL)
+                drop_database(settings.TEST_CASE_BACKEND_URL)
 
-            create_database(TEST_CASE_BACKEND_URL)
+            create_database(settings.TEST_CASE_BACKEND_URL)
             Base.metadata.create_all(engine)
+
 
     def tearDown(self):
         with contextlib.suppress(sqlalchemy_exc.ProgrammingError):
-            engine = create_engine(TEST_CASE_BACKEND_URL, encoding='utf-8', echo=True)
+            engine = create_engine(settings.TEST_CASE_BACKEND_URL, encoding='utf-8', echo=True)
 
             close_all_sessions()
             if database_exists(engine.url):
-                drop_database(TEST_CASE_BACKEND_URL)
+                drop_database(settings.TEST_CASE_BACKEND_URL)

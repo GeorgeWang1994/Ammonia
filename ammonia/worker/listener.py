@@ -107,7 +107,7 @@ class TaskQueueListener(Thread):
                 task_msg = self.ready_queue.get(timeout=1)
                 if task_msg:
                     print("TaskQueueListener: 获取到消息%s" % task_msg)
-                    task_id, task_name = task_msg["task_id"], task_msg["task_name"]
+                    task_id, = task_msg["task_id"]
                     args, kwargs = task_msg["args"], task_msg["kwargs"]
                     self.ready_queue.task_done()
                     if not task_id:
@@ -115,7 +115,7 @@ class TaskQueueListener(Thread):
                         continue
 
                     print("获取到消息中的 args: %s, kwargs: %s" % (args, kwargs))
-                    self.loop.run_until_complete(self.process_callback(task_name, *args, **kwargs))
+                    self.loop.run_until_complete(self.process_callback(task_id, *args, **kwargs))
             except Empty:
                 print("TaskQueueListener: 等待消息中...")
             except KeyboardInterrupt:

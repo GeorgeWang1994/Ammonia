@@ -10,6 +10,7 @@
 """
 
 from ammonia import settings
+from ammonia.backends.backend import get_backend_by_settings
 from ammonia.base.task import TaskManager
 
 # 默认配置
@@ -25,15 +26,18 @@ DEFAULT_CONF = {
 
 class Ammonia(object):
     conf = DEFAULT_CONF
+    backend = None
 
     def __init__(self, conf=None):
         if conf:
             self.conf.update(conf)
 
-    @classmethod
-    def task(cls, *args, **kwargs):
+        backend_cls = get_backend_by_settings(self.conf["BACKEND_TYPE"])
+        self.backend = backend_cls(self.conf["BACKEND_URL"])
+
+    def task(self, *args, **kwargs):
         def decorator(func):
-            return TaskManager.create_task(func, *args, **kwargs)
+            return TaskManager.create_task(func, self.backend, *args, **kwargs)
         return decorator
 
     def update_conf(self, conf={}):

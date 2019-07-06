@@ -39,7 +39,16 @@ class BaseBackend(object):
         标记任务为已经完成
         :param task_id:
         :param result:
-        :param trace:
+        :return:
+        """
+        return NotImplemented
+
+    def mark_task_retry(self, task_id, result=None):
+        """
+        标记任务为重试
+        :param task_id:
+        :param :
+        :param result:
         :return:
         """
         return NotImplemented
@@ -49,7 +58,6 @@ class BaseBackend(object):
         标记任务为失败
         :param task_id:
         :param result:
-        :param trace:
         :return:
         """
         return NotImplemented
@@ -115,7 +123,7 @@ class MQBackend(BaseBackend):
 
         return BackendConsumer(routing_key=task_id, callbacks=task_callback, channel=self._connection)
 
-    def _insert_task(self, task_id, status=TaskStatusEnum.CREATED.value, result=None, traceback=None):
+    def _save_task(self, task_id, status=TaskStatusEnum.CREATED.value, result=None, traceback=None):
         if not task_id or status not in TaskStatusEnum:
             return False
 
@@ -136,15 +144,19 @@ class MQBackend(BaseBackend):
         if not task_id:
             return False
 
-        self._insert_task(task_id=task_id, status=TaskStatusEnum.SUCCESS.value, result=result)
-        return True
+        return self._save_task(task_id=task_id, status=TaskStatusEnum.SUCCESS.value, result=result)
 
     def mark_task_fail(self, task_id, result=None):
         if not task_id:
             return False
 
-        self._insert_task(task_id=task_id, status=TaskStatusEnum.FAIL.value, traceback=result)
-        return True
+        return self._save_task(task_id=task_id, status=TaskStatusEnum.FAIL.value, traceback=result)
+
+    def mark_task_retry(self, task_id, result=None):
+        if not task_id:
+            return False
+
+        return self._save_task(task_id=task_id, status=TaskStatusEnum.RETRY.value, traceback=result)
 
     def get_task_result(self, task_id, timeout=None):
         if not task_id:
@@ -236,7 +248,7 @@ class DbBackend(BaseBackend):
 
         return self.get_session().query(Task).filter(Task.task_id.in_([task_id_list])).all()
 
-    def _insert_task(self, task_id, status=TaskStatusEnum.CREATED.value, result=None, traceback=None):
+    def _save_task(self, task_id, status=TaskStatusEnum.CREATED.value, result=None, traceback=None):
         if not task_id or status not in TaskStatusEnum.all_values():
             return False
 
@@ -249,19 +261,23 @@ class DbBackend(BaseBackend):
         self.get_session().commit()
         return True
 
+    def mark_task_retry(self, task_id, result=None):
+        if not task_id:
+            return False
+
+        return self._save_task(task_id=task_id, status=TaskStatusEnum.RETRY.value, result=result)
+
     def mark_task_success(self, task_id, result=None):
         if not task_id:
             return False
 
-        self._insert_task(task_id=task_id, status=TaskStatusEnum.SUCCESS.value, result=result)
-        return True
+        return self._save_task(task_id=task_id, status=TaskStatusEnum.SUCCESS.value, result=result)
 
     def mark_task_fail(self, task_id, result=None):
         if not task_id:
             return False
 
-        self._insert_task(task_id=task_id, status=TaskStatusEnum.FAIL.value, traceback=result)
-        return True
+        return self._save_task(task_id=task_id, status=TaskStatusEnum.FAIL.value, traceback=result)
 
     def _get_task_result(self, task_id):
         task = self.get_task(task_id)
@@ -328,6 +344,12 @@ class RedisBackend(BaseBackend):
 
         self._connection.lpush(task_id, result)
         return True
+
+    def mark_task_retry(self, task_id, result=None):
+        if not task_id:
+            return False
+
+        return self._save_task(task_id=task_id, status=TaskStatusEnum.RETRY.value, result=result)
 
     def mark_task_success(self, task_id, result=None):
         """
