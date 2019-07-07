@@ -36,9 +36,23 @@ class Ammonia(object):
         self.backend = backend_cls(self.conf["BACKEND_URL"])
 
     def task(self, *args, **kwargs):
+        """
+        task装饰器，创建task任务
+        :param args:
+        :param kwargs:
+        :return:
+        """
         def decorator(func):
             return TaskManager.create_task(func, self.backend, *args, **kwargs)
         return decorator
+
+    def create_package(self, name):
+        """
+        创建任务package
+        :param name:
+        :return:
+        """
+        return TaskManager.create_task_package(name, self.backend)
 
     def update_conf(self, conf={}):
         return self.conf.update(conf)
