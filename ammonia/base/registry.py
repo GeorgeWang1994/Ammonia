@@ -24,25 +24,25 @@ class Registry(dict):
         :param task:
         :return:
         """
-        self[task.task_id] = task
+        self[task.task_name] = task
 
     def unregister(self, task):
         """
         :param task:
         :return:
         """
-        self.pop(task.task_id, None)
+        self.pop(task.task_name, None)
 
-    def task(self, task_id):
+    def task(self, task_name):
         """
 
-        :param task_id:
+        :param task_name:
         :return:
         """
         try:
-            return self[task_id]
+            return self[task_name]
         except NotRegisterException:
-            raise NotRegisterException(task_id)
+            raise NotRegisterException(task_name)
 
 
 task_registry = Registry()

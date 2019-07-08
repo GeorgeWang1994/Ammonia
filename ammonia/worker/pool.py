@@ -68,7 +68,6 @@ class AsyncPool(object):
             except (KeyboardInterrupt, MemoryError, SystemExit) as e:
                 future.set_exception(e)
                 print("pool worker: bye bye")
-                raise
             finally:
                 self.queue.task_done()
 

@@ -46,13 +46,13 @@ class Ammonia(object):
             return TaskManager.create_task(func, self.backend, *args, **kwargs)
         return decorator
 
-    def create_package(self, name):
+    def create_package(self, name, *args, **kwargs):
         """
         创建任务package
         :param name:
         :return:
         """
-        return TaskManager.create_task_package(name, self.backend)
+        return TaskManager.create_task_package(name, self.backend, *args, **kwargs)
 
     def update_conf(self, conf={}):
         return self.conf.update(conf)
