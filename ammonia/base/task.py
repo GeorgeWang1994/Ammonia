@@ -11,6 +11,7 @@
 
 import random
 import sys
+from collections import Iterable
 
 from ammonia import settings
 from ammonia.base.registry import task_registry
@@ -104,6 +105,7 @@ class TaskPackage(BaseTask):
     def __init__(self, task_name, backend, *args, **kwargs):
         super(TaskPackage, self).__init__(task_name, backend, *args, **kwargs)
         self.task_list = []
+        self.is_dependent = getattr(self, "dependent", False)  # 是否前一个任务依赖于上一个任务的结果
 
     def register(self, task):
         if not task or task in self.task_list:
@@ -126,12 +128,13 @@ class TaskPackage(BaseTask):
         if len(self.task_list) <= 1:
             raise Exception("任务包中任务个数至少为两个")
 
+        task_id = generate_random_uid()
         self.status = TaskStatusEnum.PREPARE.value
         # 如果是直接调用，则直接计算返回
         if is_immediate:
-            return package_trace_execute(self, *args)
+            return package_trace_execute(task_id, self, *args)
 
-        return self.defer_async(*args)
+        return self.defer_async(task_id, *args)
 
 
 class TaskManager(object):
@@ -181,7 +184,7 @@ class TaskManager(object):
             if isinstance(kwargs["package"], str):
                 package_name = kwargs["package"]
             elif isinstance(kwargs["package"], TaskPackage):
-                package_name = kwargs["package"].package_name
+                package_name = kwargs["package"].task_name
             else:
                 raise TypeError("package填写错误")
 
@@ -197,7 +200,7 @@ class TaskManager(object):
 
     @classmethod
     def create_task_package(cls, package_name, backend, *args, **kwargs):
-        task_package_cls = cls.create_task_class(package_name, **kwargs)
+        task_package_cls = cls.create_task_package_class(package_name, **kwargs)
         task_package = task_package_cls(package_name, backend, *args, **kwargs)
         task_registry.register(task_package)
         return task_package
@@ -298,13 +301,22 @@ class TaskPackageTrace(BaseTrace):
     """
     def _execute(self, *args):
         idx = 0
+        last_result = None
         result = None
         while idx < len(self.task_or_package.task_list):
             task = self.task_or_package.task_list[idx]
-            # 有些任务并不需要参数，因此填空
-            sub_args = args[idx] if idx < len(args) else ()
+            if not self.task_or_package.is_dependent:
+                # 有些任务并不需要参数，因此填空
+                sub_args = args[idx] if idx < len(args) else ()
+            else:
+                # 任务依赖遇上一个任务的结果作为参数
+                if idx > 0:
+                    sub_args = last_result if isinstance(last_result, Iterable) else (last_result,)
+                else:
+                    sub_args = args[0] if args else ()
             try:
                 result = self.do_exec_func(task, *sub_args)
+                last_result = result
                 print("任务[%s]执行成功, 结果为[%s]" % (task, result))
                 idx += 1
                 continue

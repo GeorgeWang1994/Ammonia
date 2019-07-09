@@ -25,6 +25,19 @@ def test_task_retry_func(a, b):
     return a + b
 
 
+package1 = ammonia.create_package("test_create_package", dependent=True)
+
+
+@ammonia.task(package=package1)
+def test_task_package_task1(a, b):
+    return a + 2, b + 3
+
+
+@ammonia.task(package=package1)
+def test_task_package_task2(a, b):
+    return a * b
+
+
 class TestTask(TestDBBackendBase):
     def setUp(self):
         super().setUp()
@@ -51,3 +64,14 @@ class TestTask(TestDBBackendBase):
 
         task = task_registry.get('test_task.test_task_retry_func')
         self.assertEqual(task.status, TaskStatusEnum.RETRY.value)
+
+    def test_task_package(self):
+        """
+        测试任务包
+        :return:
+        """
+        result = package1((1, 2))  # (1 + 2) * (2 + 3)
+        self.assertEqual(result, 15)
+
+        task = task_registry.get('test_create_package')
+        self.assertEqual(task.status, TaskStatusEnum.SUCCESS.value)
