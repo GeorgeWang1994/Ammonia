@@ -11,7 +11,7 @@
 
 import logging
 from queue import Empty
-from threading import Thread
+import threading
 
 from kombu.mixins import ConsumerMixin
 
@@ -85,12 +85,13 @@ class TaskListener(object):
         message.ack()
 
 
-class TaskQueueListener(Thread):
+class TaskQueueListener(threading.Thread):
     """
     负责监听ready_queue，将队列中的消息给取出来，加入到协程池
     """
     def __init__(self, ready_queue, process_callback, loop, *args, **kwargs):
         super(TaskQueueListener, self).__init__(name="task_queue_listener", target=self.consume, *args, **kwargs)
+        self.daemon = True
         self.ready_queue = ready_queue
         self.process_callback = process_callback
         self.loop = loop

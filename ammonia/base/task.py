@@ -9,6 +9,7 @@
 @desc:      任务相关的类
 """
 
+import datetime
 import random
 import sys
 from collections import Iterable
@@ -21,6 +22,25 @@ from ammonia.state import TaskStatusEnum
 from ammonia.utils import generate_random_uid
 
 
+class Crontab(object):
+    def __init__(self, month="*", day="*", hour="*", minute="*", second="*"):
+        self.month = month
+        self.day = day
+        self.hour = hour
+        self.minute = minute
+        self.second = second
+
+    @property
+    def data(self):
+        return {
+            "month": self.month,
+            "day": self.day,
+            "hour": self.hour,
+            "minute": self.minute,
+            "second": self.second,
+        }
+
+
 class BaseTask(object):
     def __init__(self, task_name, backend, *args, **kwargs):
         # 这里的args和kwargs是函数的，而装饰器的参数则是类的参数
@@ -28,8 +48,14 @@ class BaseTask(object):
         self.status = TaskStatusEnum.CREATED.value
         self.routing_key = getattr(self, "routing_key", "")
         self.retry = getattr(self, "retry", 0)
+        self.crontab = getattr(self, "crontab", None)
+        self.eta = getattr(self, "eta", 0)  # 具体的执行时间，格式为datetime
+        self.wait = getattr(self, "wait", 0)  # 等待执行的时间间隔，格式为delta
+        self.execute_args = ()  # 执行函数的参数
+        self.execute_kwargs = {}  # 执行函数的参数
         self.backend = backend
         self.result = None
+        self.start_time = None
 
     def execute(self):
         raise NotImplemented
@@ -44,9 +70,18 @@ class BaseTask(object):
             "status": self.status,
             "routing_key": self.routing_key,
             "retry": self.retry,
+            "crontab": self.crontab.data if self.crontab else {},
+            "eta": self.eta,
+            "wait": self.wait,
+            "execute_args": self.execute_args,
+            "execute_kwargs": self.execute_kwargs,
         }
 
-    def defer_async(self, task_id, *args, **kwargs):
+    @property
+    def execute_time(self):
+        return self.start_time
+
+    def defer_async(self, task_id):
         """
         这里的参数是执行函数的参数，延迟执行
         :return:
@@ -59,22 +94,29 @@ class BaseTask(object):
                 self.routing_key = random.choice(settings.TASK_ROUTING_KEY_LIST)
             print("发送消息给路由%s %s" % (self.routing_key, self.data()))
             producer = self.get_task_producer(channel=conn, routing_key=self.routing_key)
-            data = self.data()
-            data.update({
-                "args": args,
-                "kwargs": kwargs,
-            })
-            producer.publish_task(data, routing_key=self.routing_key,
+            producer.publish_task(self.data(), routing_key=self.routing_key,
                                   exchange=task_exchange, declare=task_queues)
             return AsyncResult(task_id=task_id, backend=self.backend)
 
     def __call__(self, *args, **kwargs):
-        return self._process_task(True, *args, **kwargs)
+        self.base_process_task(*args, **kwargs)
+        return self.process_task(True)
 
     def defer(self, *args, **kwargs):
-        return self._process_task(False, *args, **kwargs)
+        self.base_process_task(*args, **kwargs)
+        return self.process_task(False)
 
-    def _process_task(self, is_immediate=False, *args, **kwargs):
+    def base_process_task(self, *args, **kwargs):
+        self.start_time = datetime.datetime.now()
+        if self.eta:
+            self.start_time = self.eta
+        elif self.wait:
+            self.start_time = self.start_time + self.wait
+
+        self.execute_args = args
+        self.execute_kwargs = kwargs
+
+    def process_task(self, is_immediate=False):
         raise NotImplemented
 
 
@@ -83,9 +125,8 @@ class Task(BaseTask):
     def __str__(self):
         return "task[%s-%s]" % (self.task_name, self.status)
 
-    def _process_task(self, is_immediate=False, *args, **kwargs):
+    def process_task(self, is_immediate=False):
         """
-        :param task:
         :param is_immediate: 是否立即执行
         :return:
         """
@@ -93,9 +134,9 @@ class Task(BaseTask):
         self.status = TaskStatusEnum.PREPARE.value
         # 如果是直接调用，则直接计算返回
         if is_immediate:
-            return task_trace_execute(task_id, self, *args, **kwargs)
+            return task_trace_execute(task_id, self)
 
-        return self.defer_async(task_id, *args, **kwargs)
+        return self.defer_async(task_id)
 
 
 class TaskPackage(BaseTask):
@@ -116,9 +157,8 @@ class TaskPackage(BaseTask):
     def __str__(self):
         return "package[%s-%s]" % (self.task_name, self.status)
 
-    def _process_task(self, is_immediate=False, *args):
+    def process_task(self, is_immediate=False):
         """
-        :param task:
         :param is_immediate: 是否立即执行
         :return:
         """
@@ -132,9 +172,9 @@ class TaskPackage(BaseTask):
         self.status = TaskStatusEnum.PREPARE.value
         # 如果是直接调用，则直接计算返回
         if is_immediate:
-            return package_trace_execute(task_id, self, *args)
+            return package_trace_execute(task_id, self)
 
-        return self.defer_async(task_id, *args)
+        return self.defer_async(task_id)
 
 
 class TaskManager(object):
@@ -332,9 +372,9 @@ class TaskPackageTrace(BaseTrace):
         return self.result
 
 
-def task_trace_execute(task_id, task, *args, **kwargs):
-    return TaskTrace(task_id=task_id, task=task).execute(*args, **kwargs)
+def task_trace_execute(task_id, task):
+    return TaskTrace(task_id=task_id, task=task).execute(*task.execute_args, **task.execute_kwargs)
 
 
-def package_trace_execute(task_id, package, *args):
-    return TaskPackageTrace(task_id=task_id, task=package).execute(*args)
+def package_trace_execute(task_id, package):
+    return TaskPackageTrace(task_id=task_id, task=package).execute(*package.execute_args)
