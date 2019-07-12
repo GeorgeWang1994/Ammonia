@@ -45,6 +45,7 @@ class BaseTask(object):
     def __init__(self, task_name, backend, *args, **kwargs):
         # 这里的args和kwargs是函数的，而装饰器的参数则是类的参数
         self.task_name = task_name
+        self.task_id = ""
         self.status = TaskStatusEnum.CREATED.value
         self.routing_key = getattr(self, "routing_key", "")
         self.retry = getattr(self, "retry", 0)
@@ -67,6 +68,7 @@ class BaseTask(object):
     def data(self):
         return {
             "task_name": self.task_name,
+            "task_id": self.task_id,
             "status": self.status,
             "routing_key": self.routing_key,
             "retry": self.retry,
@@ -81,7 +83,7 @@ class BaseTask(object):
     def execute_time(self):
         return self.start_time
 
-    def defer_async(self, task_id):
+    def defer_async(self):
         """
         这里的参数是执行函数的参数，延迟执行
         :return:
@@ -96,15 +98,15 @@ class BaseTask(object):
             producer = self.get_task_producer(channel=conn, routing_key=self.routing_key)
             producer.publish_task(self.data(), routing_key=self.routing_key,
                                   exchange=task_exchange, declare=task_queues)
-            return AsyncResult(task_id=task_id, backend=self.backend)
+            return AsyncResult(task_id=self.task_id, backend=self.backend)
 
     def __call__(self, *args, **kwargs):
         self.base_process_task(*args, **kwargs)
-        return self.process_task(True)
+        return self.process_task(True, *args, **kwargs)
 
     def defer(self, *args, **kwargs):
         self.base_process_task(*args, **kwargs)
-        return self.process_task(False)
+        return self.process_task(False, *args, **kwargs)
 
     def base_process_task(self, *args, **kwargs):
         self.start_time = datetime.datetime.now()
@@ -115,8 +117,10 @@ class BaseTask(object):
 
         self.execute_args = args
         self.execute_kwargs = kwargs
+        self.task_id = generate_random_uid()
+        self.status = TaskStatusEnum.PREPARE.value
 
-    def process_task(self, is_immediate=False):
+    def process_task(self, is_immediate=False, *args, **kwargs):
         raise NotImplemented
 
 
@@ -125,18 +129,16 @@ class Task(BaseTask):
     def __str__(self):
         return "task[%s-%s]" % (self.task_name, self.status)
 
-    def process_task(self, is_immediate=False):
+    def process_task(self, is_immediate=False, *args, **kwargs):
         """
         :param is_immediate: 是否立即执行
         :return:
         """
-        task_id = generate_random_uid()
-        self.status = TaskStatusEnum.PREPARE.value
         # 如果是直接调用，则直接计算返回
         if is_immediate:
-            return task_trace_execute(task_id, self)
+            return task_trace_execute(self.task_id, self, *args, **kwargs)
 
-        return self.defer_async(task_id)
+        return self.defer_async()
 
 
 class TaskPackage(BaseTask):
@@ -157,7 +159,7 @@ class TaskPackage(BaseTask):
     def __str__(self):
         return "package[%s-%s]" % (self.task_name, self.status)
 
-    def process_task(self, is_immediate=False):
+    def process_task(self, is_immediate=False, *args, **kwargs):
         """
         :param is_immediate: 是否立即执行
         :return:
@@ -168,13 +170,11 @@ class TaskPackage(BaseTask):
         if len(self.task_list) <= 1:
             raise Exception("任务包中任务个数至少为两个")
 
-        task_id = generate_random_uid()
-        self.status = TaskStatusEnum.PREPARE.value
         # 如果是直接调用，则直接计算返回
         if is_immediate:
-            return package_trace_execute(task_id, self)
+            return package_trace_execute(self.task_id, self, *args, **kwargs)
 
-        return self.defer_async(task_id)
+        return self.defer_async()
 
 
 class TaskManager(object):
@@ -246,13 +246,13 @@ class TaskManager(object):
         return task_package
 
     @classmethod
-    async def execute_task(cls, pool, task_name, task_id, *args, **kwargs):
+    async def execute_task(cls, pool, task_id, task_name, *args, **kwargs):
         task = task_registry.task(task_name)
         if not task:
             print("task is None, stop running...")
             return
 
-        print("开始处理任务 task_id: %s, task: %s, args: %s, kwargs: %s" % (task_id, task, args, kwargs))
+        print("开始处理任务 task_name: %s, task: %s, args: %s, kwargs: %s" % (task_name, task, args, kwargs))
         await pool.apply_async(task_trace_execute, cls.on_task_success, cls.on_task_fail, task_id, task, *args, **kwargs)
 
     @classmethod
@@ -291,7 +291,10 @@ class BaseTrace(object):
             success, result = self._execute(*args, **kwargs)
             if success:
                 self.do_exec_success(result)
+                print("任务[%s]执行成功, 结果为[%s]" % (self.task, result))
                 return result
+            else:
+                print("任务[%s]执行失败, 结果为[%s]" % (self.task, result))
 
         # 记录到数据库中
         if self.task_or_package.retry:
@@ -323,7 +326,6 @@ class TaskTrace(BaseTrace):
     def _execute(self, *args, **kwargs):
         try:
             result = self.do_exec_func(*args, **kwargs)
-            print("任务执行成功, %s" % result)
             return True, result
         except Exception as e:
             error = e.args[0]
@@ -372,9 +374,9 @@ class TaskPackageTrace(BaseTrace):
         return self.result
 
 
-def task_trace_execute(task_id, task):
-    return TaskTrace(task_id=task_id, task=task).execute(*task.execute_args, **task.execute_kwargs)
+def task_trace_execute(task_id, task, *args, **kwargs):
+    return TaskTrace(task_id=task_id, task=task).execute(*args, **kwargs)
 
 
-def package_trace_execute(task_id, package):
-    return TaskPackageTrace(task_id=task_id, task=package).execute(*package.execute_args)
+def package_trace_execute(task_id, package, *args, **kwargs):
+    return TaskPackageTrace(task_id=task_id, task=package).execute(*args, **kwargs)

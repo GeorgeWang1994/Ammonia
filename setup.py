@@ -15,11 +15,12 @@ requirements = [
     'Tempita==0.5.2',
     'vine==1.3.0',
     'PyMySQL==0.9.3',
+    'redis==3.2.1',
 ]
 
 setup(
     name="Ammonia",
-    version="0.0.6",
+    version="0.0.11",
     description="task queue",
     author="george wang",
     author_email="georgewang1994@163.com",

@@ -72,7 +72,7 @@ class Loader(BaseLoader):
                 mod = importlib.import_module("%s.%s" % (project_name, task_module))
                 mod_list.append(mod)
             except ModuleNotFoundError:
-                print("无法导入任务模块【%s】" % task_module)
-                pass
+                print("无法从项目【%s】中导入任务模块【%s】" % (project_name, task_module))
+                raise
 
         return mod_list
