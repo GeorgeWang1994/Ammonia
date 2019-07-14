@@ -12,6 +12,7 @@
 from argparse import ArgumentParser
 
 from ammonia.base.loader import Loader
+from ammonia.base.registry import task_registry
 from ammonia.worker.controller import WorkerController
 
 # 命令提示信息
@@ -42,8 +43,10 @@ class Worker(object):
         self.loader = Loader()
 
     def setup(self):
-        result = self.loader.find_tasks(self.project_name)
-        print(START_UP_MSG.format(tasks=result))
+        result = self.loader.on_worker_start(self.project_name)
+        print("fund task modules: %s" % result)
+        task_list = task_registry.values()
+        print(START_UP_MSG.format(tasks=task_list))
 
     def run(self):
         self.worker_controller.start()

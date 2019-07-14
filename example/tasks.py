@@ -11,7 +11,6 @@
 
 
 from .ammonia import ammonia
-import datetime
 
 
 @ammonia.task()
@@ -19,6 +18,6 @@ def get_sum(a, b):
     return a + b
 
 
-@ammonia.task(wait=datetime.timedelta(seconds=5))
+@ammonia.task(wait=5)
 def get_sum2(a, b):
     return a + b

@@ -11,12 +11,33 @@
 
 import importlib
 import os
-from importlib import util
+import pkgutil
+import sys
+from contextlib import contextmanager
 
-from ammonia.settings import BASE_PROJECT_PATH, TASK_MODULE_SUFFIX
+
+@contextmanager
+def cwd_in_path():
+    """将当前工作路径加入到path中"""
+    cwd = os.getcwd()
+    if cwd in sys.path:
+        yield
+    else:
+        sys.path.insert(0, cwd)
+        try:
+            yield cwd
+        finally:
+            try:
+                sys.path.remove(cwd)
+            except ValueError:  # pragma: no cover
+                pass
 
 
 class BaseLoader(object):
+
+    TASK_MODULE_PREFIX = 'tasks'  # 默认的任务模块
+
+    BASE_PROJECT_PATH = os.getcwd()  # 当前工作路径
 
     @classmethod
     def find_tasks(cls, project_name):
@@ -30,16 +51,24 @@ class BaseLoader(object):
 class Loader(BaseLoader):
 
     @classmethod
+    def check_modules_equal(cls, path, package_name):
+        module_iter = pkgutil.iter_modules([path])
+        for module in module_iter:
+            if module.name == package_name:
+                return True
+        return False
+
+    @classmethod
     def get_tasks_from_dictionary(cls, package_name):
         """
         获取到当前目录下的所有以_tasks为结尾的文件
         :param package_name
         :return:
         """
-        if not util.find_spec(package_name, package="."):
+        if not cls.check_modules_equal(cls.BASE_PROJECT_PATH, package_name):
             raise ModuleNotFoundError("在项目中未找到package[%s]，请检查是否是一级目录" % package_name)
 
-        package_path = os.path.join(BASE_PROJECT_PATH, package_name)
+        package_path = os.path.join(cls.BASE_PROJECT_PATH, package_name)
 
         file_list = []
         for dir_path in os.listdir(package_path):
@@ -47,7 +76,7 @@ class Loader(BaseLoader):
                 continue
 
             basename = os.path.basename(dir_path)
-            if not basename[:-3].endswith(TASK_MODULE_SUFFIX):
+            if not basename.startswith(cls.TASK_MODULE_PREFIX):
                 continue
 
             file_list.append(basename)
@@ -66,13 +95,14 @@ class Loader(BaseLoader):
             return []
 
         mod_list = []
-        for task in task_list:
-            task_module = task[:-3]
-            try:
-                mod = importlib.import_module("%s.%s" % (project_name, task_module))
-                mod_list.append(mod)
-            except ModuleNotFoundError:
-                print("无法从项目【%s】中导入任务模块【%s】" % (project_name, task_module))
-                raise
+        with cwd_in_path():
+            for task in task_list:
+                task_module = task[:-3]
+                try:
+                    mod = importlib.import_module("%s.%s" % (project_name, task_module))
+                    mod_list.append(mod)
+                except ModuleNotFoundError:
+                    print("无法从项目【%s】中导入任务模块【%s】" % (project_name, task_module))
+                    raise
 
         return mod_list

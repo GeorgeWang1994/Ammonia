@@ -49,18 +49,21 @@ class Schedule(threading.Thread):
 
         # 默认等待很长的时间
         if next_internal_time is None:
-            next_internal_time = 1000
+            next_internal_time = 10
 
         return result, next_internal_time
 
     def run(self):
         print("schedule start running...")
         for task in task_registry.values():
-            if task.eta or task.wait:
+            if (task.eta or task.wait) and task.start_time:
                 self.time_task_list.append(task)
 
         print("schedule check [%s] execute tasks" % (len(self.time_task_list)))
         while True:
+            if not self.time_task_list:
+                time.sleep(10)
+
             self.sort_tasks()
             start_time = datetime.datetime.now()
 
