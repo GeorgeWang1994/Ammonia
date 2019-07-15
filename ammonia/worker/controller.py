@@ -10,7 +10,7 @@
 """
 
 import asyncio
-from queue import Queue
+from queue import Queue, PriorityQueue
 
 from ammonia.base.task import TaskManager
 from ammonia.worker.listener import TaskListener, TaskQueueListener
@@ -24,8 +24,9 @@ class WorkerController(object):
     """
     def __init__(self, pool_worker_count=10):
         self.ready_queue = Queue()
-        self.listener = TaskListener(ready_queue=self.ready_queue)
+        self.schedule_queue = PriorityQueue()
         self.schedule = Schedule(ready_queue=self.ready_queue)
+        self.listener = TaskListener(ready_queue=self.ready_queue, schedule=self.schedule)
         self.loop = asyncio.get_event_loop()
         self.queue_listener = TaskQueueListener(ready_queue=self.ready_queue,
                                                 process_callback=self.process_task, loop=self.loop)
@@ -37,8 +38,8 @@ class WorkerController(object):
             self.listener,
         )
 
-    async def process_task(self, task_id, task_name, *args, **kwargs):
-        await TaskManager.execute_task(self.pool, task_id, task_name, *args, **kwargs)
+    async def process_task(self, task):
+        await TaskManager.execute_task(self.pool, task)
 
     def start(self):
         """

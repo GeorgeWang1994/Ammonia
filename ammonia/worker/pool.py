@@ -63,7 +63,7 @@ class AsyncPool(object):
             print("future:[%s], executor_func:[%s], args:[%s], kwargs:[%s]" % (future, executor_func, args, kwargs))
             try:
                 result_value = executor_func(*args, **kwargs)
-                print("获取到任务的结果:%s", result_value)
+                print("获取到任务的结果:%s" % result_value)
                 future.set_result(result_value)
             except (KeyboardInterrupt, MemoryError, SystemExit) as e:
                 future.set_exception(e)
@@ -79,7 +79,6 @@ class AsyncPool(object):
 
     def on_receive(self, future, success_callback, error_callback):
         result_value = future.result()
-        print("获取到任务的结果:%s", result_value)
 
         if success_callback:
             success_callback(result_value)

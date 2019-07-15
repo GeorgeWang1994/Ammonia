@@ -205,40 +205,44 @@ class DbBackend(BaseBackend):
     """
     def __init__(self, backend_url=settings.BACKEND_URL, timeout=None):
         super(DbBackend, self).__init__(backend_url=backend_url, timeout=timeout)
-        self._session = None
+        self._sessionmaker = None
+        self._db = None
 
     def establish_connection(self):
-        if self._connection:
+        if self._db:
             return
 
-        self._connection = create_engine(self.backend_url, pool_timeout=self.timeout)
-        self._connection.connect()
+        self._db = create_engine(self.backend_url, pool_timeout=self.timeout)
+        self._connection = self._db.connect()
 
     def close_connection(self):
         """
         关闭连接
         :return:
         """
-        if not self._connection:
+        if not self._db:
             return
 
+        self._sessionmaker.close_all()
         self._connection.close()
-        self._session.close_all()
+        self._db.dispose()
         self._connection = None
-        self._session = None
+        self._sessionmaker = None
+        self._db = None
 
-    def get_session(self):
-        if self._session:
-            return self._session
+    def create_session(self):
+        if self._sessionmaker:
+            return self._sessionmaker()
 
-        self.establish_connection()
-        session = sessionmaker(bind=self._connection)
-        self._session = session()
-        return self._session
+        if not self._db:
+            self.establish_connection()
+
+        self._sessionmaker = sessionmaker(bind=self._db)
+        return self._sessionmaker()
 
     def get_task(self, task_id):
         try:
-            return self.get_session().query(Task).filter(Task.task_id == task_id).one()
+            return self.create_session().query(Task).filter(Task.task_id == task_id).one()
         except (exc.MultipleResultsFound, exc.NoResultFound):
             return None
 
@@ -246,7 +250,7 @@ class DbBackend(BaseBackend):
         if not task_id_list:
             return []
 
-        return self.get_session().query(Task).filter(Task.task_id.in_([task_id_list])).all()
+        return self.create_session().query(Task).filter(Task.task_id.in_([task_id_list])).all()
 
     def _save_task(self, task_id, status=TaskStatusEnum.CREATED.value, result=None, traceback=None):
         if not task_id or status not in TaskStatusEnum.all_values():
@@ -257,8 +261,9 @@ class DbBackend(BaseBackend):
         elif traceback is not None:
             traceback = pickle.dumps(traceback, protocol=pickle.HIGHEST_PROTOCOL)
 
-        self.get_session().add(Task(task_id=task_id, status=status, _result=result, _traceback=traceback))
-        self.get_session().commit()
+        session = self.create_session()
+        session.add(Task(task_id=task_id, status=status, _result=result, _traceback=traceback))
+        session.commit()
         return True
 
     def mark_task_retry(self, task_id, result=None):

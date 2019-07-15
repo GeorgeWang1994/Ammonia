@@ -11,10 +11,12 @@
 
 import logging
 import threading
+import time
 from queue import Empty
 
 from kombu.mixins import ConsumerMixin
 
+from ammonia.base.task import TaskManager
 from ammonia.mq import TaskConnection, task_queues, TaskConsumer
 
 logger = logging.getLogger(__name__)
@@ -34,9 +36,10 @@ class TaskListener(object):
     """
     负责监听consumer，将consumer中的消息给取出来
     """
-    def __init__(self, ready_queue, *args, **kwargs):
+    def __init__(self, ready_queue, schedule, *args, **kwargs):
         self.task_consumer = None
         self.ready_queue = ready_queue
+        self.schedule = schedule
         self._connection = None
 
     def establish_connection(self):
@@ -81,7 +84,12 @@ class TaskListener(object):
 
     def handle_task_message(self, body, message):
         print("TaskListener: 获取到消息%s" % body)
-        self.ready_queue.put(body)
+        is_package = body.pop("is_package", False)
+        exe_task = TaskManager.create_exe_task_or_package(is_package, **body)
+        if exe_task.task.eta or exe_task.task.wait:
+            self.schedule.register_task(exe_task)
+        else:
+            self.ready_queue.put(exe_task)
         message.ack()
 
 
@@ -91,7 +99,7 @@ class TaskQueueListener(threading.Thread):
     """
     def __init__(self, ready_queue, process_callback, loop, *args, **kwargs):
         super(TaskQueueListener, self).__init__(name="task_queue_listener", target=self.consume, *args, **kwargs)
-        self.daemon = True
+        self.setDaemon(True)
         self.ready_queue = ready_queue
         self.process_callback = process_callback
         self.loop = loop
@@ -105,20 +113,14 @@ class TaskQueueListener(threading.Thread):
         logging.info("task queue listener start...")
         while True:
             try:
-                task_msg = self.ready_queue.get(timeout=1)
-                if task_msg:
-                    print("TaskQueueListener: 获取到消息%s" % task_msg)
-                    task_id, task_name = task_msg["task_id"], task_msg["task_name"]
-                    args, kwargs = task_msg["execute_args"], task_msg["execute_kwargs"]
+                task = self.ready_queue.get()
+                if task:
+                    print("TaskQueueListener: 获取到消息%s" % task)
                     self.ready_queue.task_done()
-                    if not task_name:
-                        print("task is None, stop running...")
-                        continue
-
-                    print("获取到消息中的 args: %s, kwargs: %s" % (args, kwargs))
-                    self.loop.run_until_complete(self.process_callback(task_id, task_name, *args, **kwargs))
+                    print("获取到消息中的 args: %s, kwargs: %s" % (task.execute_args, task.execute_kwargs))
+                    self.loop.run_until_complete(self.process_callback(task))
             except Empty:
-                print("TaskQueueListener: 等待消息中...")
+                time.sleep(1)
             except KeyboardInterrupt:
                 print("TaskQueueListener: bye bye")
 
