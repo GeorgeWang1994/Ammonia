@@ -20,7 +20,7 @@ requirements = [
 
 setup(
     name="Ammonia",
-    version="0.0.12",
+    version="0.0.13",
     description="task queue",
     author="george wang",
     author_email="georgewang1994@163.com",

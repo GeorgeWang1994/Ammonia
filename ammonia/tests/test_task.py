@@ -9,8 +9,9 @@
 @desc:      测试任务
 """
 
+import datetime
+
 from ammonia import settings
-from ammonia.base.registry import task_registry
 from ammonia.state import TaskStatusEnum
 from ammonia.tests.test_base import TestDBBackendBase, ammonia
 
@@ -25,7 +26,7 @@ def test_task_retry_func(a, b):
     return a + b
 
 
-package1 = ammonia.create_package("test_create_package", dependent=True)
+package1 = ammonia.create_package("test_create_package", dependent=True, routing_key="abc")
 
 
 @ammonia.task(package=package1)
@@ -33,8 +34,13 @@ def test_task_package_task1(a, b):
     return a + 2, b + 3
 
 
-@ammonia.task(package=package1)
+@ammonia.task(package=package1, routing_key="abc")
 def test_task_package_task2(a, b):
+    return a * b
+
+
+@ammonia.task(eta=datetime.datetime.now(), wait=datetime.timedelta(seconds=10))
+def test_task_eta_or_wait(a, b):
     return a * b
 
 
@@ -50,9 +56,7 @@ class TestTask(TestDBBackendBase):
         # 直接调用
         result = test_basic_task_param_func(1, 2)
         self.assertEqual(result, 3)
-
-        task = task_registry.get('test_task.test_basic_task_param_func')
-        self.assertEqual(task.status, TaskStatusEnum.SUCCESS.value)
+        self.assertEqual(test_basic_task_param_func.status, TaskStatusEnum.SUCCESS.value)
 
     def test_task_try(self):
         """
@@ -61,9 +65,7 @@ class TestTask(TestDBBackendBase):
         """
         result = test_task_retry_func(1, "2")
         self.assertEqual(result, None)
-
-        task = task_registry.get('test_task.test_task_retry_func')
-        self.assertEqual(task.status, TaskStatusEnum.RETRY.value)
+        self.assertEqual(test_task_retry_func.status, TaskStatusEnum.RETRY.value)
 
     def test_task_package(self):
         """
@@ -71,7 +73,18 @@ class TestTask(TestDBBackendBase):
         :return:
         """
         result = package1((1, 2))  # (1 + 2) * (2 + 3)
+        self.assertTrue(package1.is_package)
+        self.assertEqual(package1.routing_key, "abc")
         self.assertEqual(result, 15)
+        self.assertEqual(package1.status, TaskStatusEnum.SUCCESS.value)
 
-        task = task_registry.get('test_create_package')
-        self.assertEqual(task.status, TaskStatusEnum.SUCCESS.value)
+    def test_task_eta_and_wait(self):
+        """
+        测试任务eta和wait参数
+        :return:
+        """
+        result = test_task_eta_or_wait(1, 2)
+        self.assertEqual(test_task_eta_or_wait.status, TaskStatusEnum.SUCCESS.value)
+        self.assertTrue(isinstance(test_task_eta_or_wait.task.eta, float))
+        self.assertTrue(isinstance(test_task_eta_or_wait.task.wait, float))
+        self.assertEqual(result, 2)

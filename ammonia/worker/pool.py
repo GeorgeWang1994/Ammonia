@@ -64,10 +64,12 @@ class AsyncPool(object):
             try:
                 result_value = executor_func(*args, **kwargs)
                 print("获取到任务的结果:%s" % result_value)
-                future.set_result(result_value)
+                future.set_result((True, result_value))
             except (KeyboardInterrupt, MemoryError, SystemExit) as e:
                 future.set_exception(e)
                 print("pool worker: bye bye")
+            except Exception as e:
+                future.set_result((False, e.args[0]))
             finally:
                 self.queue.task_done()
 
@@ -77,11 +79,12 @@ class AsyncPool(object):
         await self.queue.put((future, executor_func, args, kwargs))
         return future
 
-    def on_receive(self, future, success_callback, error_callback):
-        result_value = future.result()
+    def on_receive(self, success_callback, error_callback, future):
+        is_success, result_value = future.result()
+        print("回调结果为 success: [%s], return value: [%s]" % (is_success, result_value))
 
-        if success_callback:
+        if is_success and success_callback:
             success_callback(result_value)
 
-        if error_callback:
+        if not is_success and error_callback:
             error_callback(result_value)

@@ -9,16 +9,17 @@
 @desc:      任务相关的类
 """
 
-import random
+import datetime
 import sys
 import time
 from collections import Iterable
 
-from ammonia import settings
+from ammonia.backends.backend import get_backend_by_settings
 from ammonia.base.registry import task_registry
 from ammonia.base.result import AsyncResult
 from ammonia.mq import TaskProducer, TaskConnection, task_exchange, task_queues
 from ammonia.state import TaskStatusEnum
+from ammonia.utils import generate_random_routing_key
 from ammonia.utils import generate_random_uid
 
 
@@ -42,24 +43,27 @@ class Crontab(object):
 
 
 class BaseTask(object):
-    routing_key = ""
-    retry = 0
-    eta = None
-    wait = None
-    crontab = None
-
+    """
+    基础任务
+    """
     def __init__(self, task_name, **kwargs):
         # 这里的args和kwargs是函数的，而装饰器的参数则是类的参数
         self.task_name = task_name
-        self.routing_key = getattr(self, "routing_key", random.choice(settings.TASK_ROUTING_KEY_LIST))
+        self.routing_key = getattr(self, "routing_key", generate_random_routing_key())
         self.retry = getattr(self, "retry", 0)
         self.crontab = getattr(self, "crontab", None)
-        eta_time = getattr(self, "eta", None)  # 具体的执行时间，格式为datetime
-        if eta_time:
-            self.eta = eta_time.timestamp()
-        wait_time = getattr(self, "wait", None)
-        if wait_time:
-            self.wait = wait_time.total_seconds()  # 等待执行的时间间隔，格式为delta
+
+        self.eta = getattr(self, "eta", None)  # 具体的执行时间，格式为datetime
+        if self.eta:
+            if not isinstance(self.eta, datetime.datetime):
+                raise TypeError("eta类型错误，应该是datetime.datetime类型")
+            self.eta = self.eta.timestamp()
+
+        self.wait = getattr(self, "wait", None)
+        if self.wait:
+            if not isinstance(self.wait, datetime.timedelta):
+                raise TypeError("wait类型错误，应该是datetime.timedelta类型")
+            self.wait = self.wait.total_seconds()  # 等待执行的时间间隔，格式为delta
 
     def execute(self):
         raise NotImplementedError
@@ -70,14 +74,13 @@ class BaseTask(object):
             "task_name": self.task_name,
             "routing_key": self.routing_key,
             "retry": self.retry,
-            "crontab": self.crontab.data if self.crontab else {},
         }
         if self.wait:
             data.update({"wait": self.wait})
         if self.eta:
             data.update({"eta": self.eta})
         if self.crontab:
-            data.update(self.crontab.data)
+            data.update({"crontab": self.crontab.data})
         return data
 
 
@@ -94,7 +97,8 @@ class ExecuteBaseTask(object):
         self.execute_kwargs = kwargs.get("execute_kwargs", {})  # 执行函数的参数
         self.is_package = kwargs.get("is_package", False)
         from ammonia.app import Ammonia
-        self.backend = Ammonia.backend
+        backend_cls = get_backend_by_settings(Ammonia.conf["BACKEND_TYPE"])
+        self.backend = backend_cls(Ammonia.conf["BACKEND_URL"])
 
     def __str__(self):
         raise NotImplementedError
@@ -105,15 +109,7 @@ class ExecuteBaseTask(object):
 
     @property
     def data(self):
-        data = self.task.data
-        data.update({
-            "task_id": self.task_id, "status": self.status, "is_package": self.is_package,
-            "execute_args": self.execute_args, "execute_kwargs": self.execute_kwargs,
-        })
-
-        if self.start_time:
-            data.update({"start_time": self.start_time.timestamp()})
-        return data
+        raise NotImplementedError
 
     def defer_async(self):
         """
@@ -124,9 +120,9 @@ class ExecuteBaseTask(object):
         with TaskConnection(hostname=Ammonia.conf["TASK_URL"],
                             connect_timeout=Ammonia.conf["TASK_CONNECTION_TIMEOUT"]) as conn:
             routing_key = self.task.routing_key
-            print("发送消息给路由%s %s" % (routing_key, self.data()))
+            print("发送消息给路由%s %s" % (routing_key, self.data))
             producer = self.get_task_producer(channel=conn, routing_key=routing_key)
-            producer.publish_task(self.data(), routing_key=routing_key,
+            producer.publish_task(self.data, routing_key=routing_key,
                                   exchange=task_exchange, declare=task_queues)
             return AsyncResult(task_id=self.task_id, backend=self.backend)
 
@@ -162,6 +158,21 @@ class Task(ExecuteBaseTask):
     def __str__(self):
         return "task[%s-%s]" % (self.task_id, self.status)
 
+    @property
+    def data(self):
+        data = self.task.data
+        data.update({
+            "task_id": self.task_id, "status": self.status, "is_package": self.is_package,
+            "execute_args": self.execute_args, "execute_kwargs": self.execute_kwargs,
+        })
+
+        if self.start_time:
+            data.update({"start_time": self.start_time})
+        return data
+
+    def execute(self, *args, **kwargs):
+        return self.task.execute(*args, **kwargs)
+
     def process_task(self, is_immediate=False, *args, **kwargs):
         """
         :param is_immediate: 是否立即执行
@@ -179,20 +190,54 @@ class TaskPackage(ExecuteBaseTask):
     将task都封装到package中，用于执行一系列任务
     """
     def __init__(self, task_name, **kwargs):
-        super(TaskPackage, self).__init__(task_name)
-        self.task_set = kwargs.get("task_list", set())
+        super(TaskPackage, self).__init__(task_name, **kwargs)
+        self.task_name = task_name
         self.is_dependent = kwargs.get("dependent", False)  # 是否前一个任务依赖于上一个任务的结果
+        self.routing_key = kwargs.get("routing_key", generate_random_routing_key())
+        self.task_list = self.init_task_list(kwargs.get("task_list", []))
+        self.retry = getattr(self, "retry", 0)
+        self.crontab = getattr(self, "crontab", None)
+
+        self.eta = getattr(self, "eta", None)  # 具体的执行时间，格式为datetime
+        if self.eta:
+            if not isinstance(self.eta, datetime.datetime):
+                raise TypeError("eta类型错误，应该是datetime.datetime类型")
+            self.eta = self.eta.timestamp()
+
+        self.wait = getattr(self, "wait", None)
+        if self.wait:
+            if not isinstance(self.wait, datetime.timedelta):
+                raise TypeError("wait类型错误，应该是datetime.timedelta类型")
+            self.wait = self.wait.total_seconds()  # 等待执行的时间间隔，格式为delta
+        self.is_package = True
 
     def __str__(self):
         return "package[%s-%s]" % (self.task_id, self.status)
 
-    def register(self, task_name):
-        self.task_set.add(task_name)
+    @classmethod
+    def init_task_list(cls, task_info_list):
+        return[TaskManager.create_exe_task_or_package(task_info) for task_info in task_info_list]
+
+    def register(self, exe_task):
+        self.task_list.append(exe_task)
 
     @property
     def data(self):
-        data = self.data
-        data.update({"task_list": list(self.task_set), "dependent": self.is_dependent})
+        data = {
+            "task_id": self.task_id, "status": self.status, "is_package": self.is_package,
+            "execute_args": self.execute_args, "execute_kwargs": self.execute_kwargs,
+            "task_list": [task.data for task in self.task_list], "dependent": self.is_dependent,
+            "task_name": self.task_name, "routing_key": self.routing_key, "retry": self.retry,
+        }
+
+        if self.wait:
+            data.update({"wait": self.wait})
+        if self.eta:
+            data.update({"eta": self.eta})
+        if self.crontab:
+            data.update({"crontab": self.crontab.data})
+        if self.start_time:
+            data.update({"start_time": self.start_time})
         return data
 
     def process_task(self, is_immediate=False, *args, **kwargs):
@@ -200,10 +245,10 @@ class TaskPackage(ExecuteBaseTask):
         :param is_immediate: 是否立即执行
         :return:
         """
-        if not self.task_set:
+        if not self.task_list:
             raise Exception("任务包中的任务为空")
 
-        if len(self.task_set) <= 1:
+        if len(self.task_list) <= 1:
             raise Exception("任务包中任务个数至少为两个")
 
         # 如果是直接调用，则直接计算返回
@@ -250,24 +295,21 @@ class TaskManager(object):
         task_module = sys.modules[execute_func.__module__]
         task_name = ".".join([task_module.__name__, execute_func.__name__, ])
         task_cls = cls.create_task_class(execute_func, **kwargs)
-        task = task_cls(task_name, *args, **kwargs)
-        task_registry.register(task)  # 注册基础任务
+        base_task = task_cls(task_name, *args, **kwargs)
+        task_registry.register(base_task)  # 注册基础任务
 
+        exe_task = cls.base_exe_task_class(task_name=task_name)
         # 如果填写了package的话，需要注册到package
         if kwargs.get("package"):
-            if isinstance(kwargs["package"], str):
-                package_name = kwargs["package"]
-            elif isinstance(kwargs["package"], TaskPackage):
-                package_name = kwargs["package"].task_name
+            if isinstance(kwargs["package"], TaskPackage):
+                package = kwargs["package"]
             else:
                 raise TypeError("package填写错误")
 
-            task_package = task_registry.task(package_name)
-            if task_package:
-                task_package.register(task_package)
+            package.register(exe_task)
 
         # 创建执行任务
-        return cls.base_exe_task_class(task_name=task_name)
+        return exe_task
 
     @classmethod
     def create_task_package_class(cls, package_name, **kwargs):
@@ -285,7 +327,7 @@ class TaskManager(object):
         task = task_cls(package_name, *args, **kwargs)
         task_registry.register(task)  # 注册基础任务
 
-        return cls.base_exe_package_class(task_name=package_name)
+        return cls.base_exe_package_class(package_name, **kwargs)
 
     @classmethod
     def create_exe_task_or_package(cls, is_package=False, **task_kwargs):
@@ -324,16 +366,17 @@ class BaseTrace(object):
 
     def execute(self, *args, **kwargs):
         print("任务开始执行 task: %s, args: %s, kwargs: %s" % (self.task_or_package, args, kwargs))
-        retry_num = self.task_or_package.retry
+        retry_num = self.task_or_package.task.retry
         result = None
 
-        if retry_num:
-            while retry_num:
+        tmp_retry_num = retry_num
+        if tmp_retry_num:
+            while tmp_retry_num:
                 success, result = self._execute(*args, **kwargs)
                 if success:
                     self.do_exec_success(result)
                     return result
-                retry_num -= 1
+                tmp_retry_num -= 1
         else:
             success, result = self._execute(*args, **kwargs)
             if success:
@@ -344,7 +387,7 @@ class BaseTrace(object):
                 print("任务[%s]执行失败, 结果为[%s]" % (self.task_or_package, result))
 
         # 记录到数据库中
-        if self.task_or_package.retry:
+        if retry_num:
             self.do_exec_retry(result)
         else:
             self.do_exec_fail(result)
