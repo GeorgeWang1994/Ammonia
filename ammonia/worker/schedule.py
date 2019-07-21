@@ -9,6 +9,7 @@
 @desc:      定期处理任务
 """
 
+import datetime
 import threading
 import time
 
@@ -25,13 +26,33 @@ class Schedule(threading.Thread):
         self.last_sync_time = None
 
     def sort_tasks(self):
-        self.start_task_list = [task for task in self.start_task_list if
-                                task.start_time >= time.time() and (task.eta or task.wait)]
-        self.start_task_list.sort(key=lambda x: x.start_time)
+        self.start_task_list.sort(key=lambda x: x["start_time"])
 
-    def register_task(self, task):
-        self.start_task_list.append(task)
+    def register_task(self, task_msg):
+        if not task_msg.get("start_time"):
+            raise KeyError("任务start_time不存在")
+
+        if not task_msg.get("eta") and not task_msg.get("wait"):
+            raise Exception("任务不符合定时任务标准")
+
+        self.start_task_list.append(task_msg)
         self.sort_tasks()
+
+    def get_need_execute_task(self, start_time):
+        task_msg = self.start_task_list[0]
+        task_start_time = task_msg["start_time"]
+        need_task_msg = None
+        if start_time < task_start_time < start_time + 1:
+            need_task_msg = task_msg
+
+        # 倒序后首次出现的下一个任务即需要执行的下一个任务
+        next_task = self.start_task_list[1] if len(self.start_task_list) > 1 else None
+        next_internal_time = None
+        if next_task:
+            next_internal_time = next_task["start_time"] - datetime.datetime.now().timestamp()
+            next_internal_time = next_internal_time if next_internal_time > 1 else None  # 小于1s，不sleep
+
+        return need_task_msg, next_internal_time
 
     def run(self):
         print("schedule start running...")
@@ -40,22 +61,16 @@ class Schedule(threading.Thread):
                 time.sleep(1)
                 continue
 
-            start_time = time.time()
-            task = self.start_task_list[0]
-            if start_time < task.start_time < start_time + 60:
-                self.ready_queue.put(self.start_task_list.pop(0))
+            start_time = datetime.datetime.now().timestamp()
+            task_msg, next_internal_time = self.get_need_execute_task(start_time)
+            if task_msg:
+                self.ready_queue.put(task_msg)
 
-            # 倒序后首次出现的下一个任务即需要执行的下一个任务
-            next_task = self.start_task_list[0] if len(self.start_task_list) else None
-            next_internal_time = 1
-            if next_task:
-                next_internal_time = next_task.start_time - start_time
-
-            next_internal_time = min(next_internal_time, 1)
             print("schedule execute task:[%s] from start_time:[%s] to end_time:[%s]" %
-                  (task, start_time, start_time))
-            time.sleep(next_internal_time)
+                  (task_msg, self.last_sync_time, start_time))
             self.last_sync_time = start_time
+            if next_internal_time:
+                time.sleep(next_internal_time)
 
     def stop(self):
         self.join()

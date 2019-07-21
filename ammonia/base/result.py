@@ -20,10 +20,7 @@ class AsyncResult(object):
         从backend中异步获取task_id对应的结果
         :return:
         """
-        is_success, result = self.backend.get_task_result(self.task_id, timeout)
-        if not is_success:
-            return result
-
+        _, result = self.backend.get_task_result(self.task_id, timeout)
         return result
 
     def get(self, timeout=None):

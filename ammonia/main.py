@@ -49,4 +49,7 @@ class Worker(object):
         print(START_UP_MSG.format(tasks=task_list))
 
     def run(self):
-        self.worker_controller.start()
+        try:
+            self.worker_controller.start()
+        except KeyboardInterrupt:
+            self.worker_controller.stop()

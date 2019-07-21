@@ -28,6 +28,7 @@ class TaskConsumerWorker(ConsumerMixin):
         self.on_task_message = on_task_message
 
     def get_consumers(self, Consumer, channel):
+        # prefetch_count 保证每个consumer在同一时间只能获取一个消息，只要该消费者消费完后才再次分发给该消费者
         return [TaskConsumer(channel=channel, queues=task_queues, prefetch_count=1, callbacks=[self.on_task_message],
                              accept=['pickle'])]
 
@@ -44,21 +45,17 @@ class TaskListener(object):
 
     def establish_connection(self):
         from ammonia.app import Ammonia
-        if self.task_consumer:
+        if self._connection:
             return
 
         self._connection = TaskConnection(hostname=Ammonia.conf["TASK_URL"],
                                           connect_timeout=Ammonia.conf["BACKEND_CONNECTION_TIMEOUT"])
         self._connection.connect()
-        # prefetch_count 保证每次consumer在同一时间只能获取一个消息
-        self.task_consumer = TaskConsumerWorker(self._connection, self.handle_task_message)
 
     def close_connection(self):
         if not self._connection:
             return
 
-        self.task_consumer.should_stop = True
-        self.task_consumer = None
         self._connection.close()
         self._connection = None
 
@@ -75,21 +72,24 @@ class TaskListener(object):
         消费消息
         :return:
         """
+        task_consumer = TaskConsumerWorker(self._connection, self.handle_task_message)
+        print("TaskListener: 获取消息中...")
         try:
-            print("TaskListener: 获取消息中...")
-            self.task_consumer.run()
+            task_consumer.run()
         except KeyboardInterrupt:
             print("TaskListener: bye bye")
-            pass
+            self.stop()
 
     def handle_task_message(self, body, message):
         print("TaskListener: 获取到消息%s" % body)
-        is_package = body.pop("is_package", False)
-        exe_task = TaskManager.create_exe_task_or_package(is_package, **body)
-        if exe_task.task.eta or exe_task.task.wait:
-            self.schedule.register_task(exe_task)
+        eta = body.get("eta", None)
+        wait = body.get("wait", None)
+        if eta or wait:
+            print("TaskListener: register time task")
+            self.schedule.register_task(body)
         else:
-            self.ready_queue.put(exe_task)
+            print("TaskListener: register now task")
+            self.ready_queue.put(body)
         message.ack()
 
 
@@ -97,28 +97,26 @@ class TaskQueueListener(threading.Thread):
     """
     负责监听ready_queue，将队列中的消息给取出来，加入到协程池
     """
-    def __init__(self, ready_queue, process_callback, loop, *args, **kwargs):
-        super(TaskQueueListener, self).__init__(name="task_queue_listener", target=self.consume, *args, **kwargs)
+    def __init__(self, ready_queue, pool, *args, **kwargs):
+        super(TaskQueueListener, self).__init__(name="task_queue_listener", *args, **kwargs)
         self.setDaemon(True)
         self.ready_queue = ready_queue
-        self.process_callback = process_callback
-        self.loop = loop
+        self.pool = pool
 
-    def consume(self):
+    def run(self):
         """
         消费消息
         :return:
         """
-        print("task queue listener start...")
-        logging.info("task queue listener start...")
+        print("TaskQueueListener: task queue listener start...")
+        logging.info("TaskQueueListener: task queue listener start...")
         while True:
             try:
-                task = self.ready_queue.get()
-                if task:
-                    print("TaskQueueListener: 获取到消息%s" % task)
+                task_msg = self.ready_queue.get()
+                if task_msg:
+                    print("TaskQueueListener: 获取到消息%s" % task_msg)
                     self.ready_queue.task_done()
-                    print("获取到消息中的 args: %s, kwargs: %s" % (task.execute_args, task.execute_kwargs))
-                    self.loop.run_until_complete(self.process_callback(task))
+                    TaskManager.execute_task(self.pool, task_msg)
             except Empty:
                 time.sleep(1)
             except KeyboardInterrupt:

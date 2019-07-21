@@ -12,7 +12,6 @@
 import datetime
 
 from ammonia import settings
-from ammonia.state import TaskStatusEnum
 from ammonia.tests.test_base import TestDBBackendBase, ammonia
 
 
@@ -55,8 +54,7 @@ class TestTask(TestDBBackendBase):
         """
         # 直接调用
         result = test_basic_task_param_func(1, 2)
-        self.assertEqual(result, 3)
-        self.assertEqual(test_basic_task_param_func.status, TaskStatusEnum.SUCCESS.value)
+        self.assertEqual(result.get(), 3)
 
     def test_task_try(self):
         """
@@ -64,8 +62,7 @@ class TestTask(TestDBBackendBase):
         :return:
         """
         result = test_task_retry_func(1, "2")
-        self.assertEqual(result, None)
-        self.assertEqual(test_task_retry_func.status, TaskStatusEnum.RETRY.value)
+        self.assertNotIsInstance(result, int)
 
     def test_task_package(self):
         """
@@ -75,8 +72,7 @@ class TestTask(TestDBBackendBase):
         result = package1((1, 2))  # (1 + 2) * (2 + 3)
         self.assertTrue(package1.is_package)
         self.assertEqual(package1.routing_key, "abc")
-        self.assertEqual(result, 15)
-        self.assertEqual(package1.status, TaskStatusEnum.SUCCESS.value)
+        self.assertEqual(result.get(), 15)
 
     def test_task_eta_and_wait(self):
         """
@@ -84,7 +80,6 @@ class TestTask(TestDBBackendBase):
         :return:
         """
         result = test_task_eta_or_wait(1, 2)
-        self.assertEqual(test_task_eta_or_wait.status, TaskStatusEnum.SUCCESS.value)
         self.assertTrue(isinstance(test_task_eta_or_wait.task.eta, float))
         self.assertTrue(isinstance(test_task_eta_or_wait.task.wait, float))
-        self.assertEqual(result, 2)
+        self.assertEqual(result.get(), 2)

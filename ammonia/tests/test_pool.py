@@ -6,50 +6,37 @@
 @datetime:  2019-05-20
 @file:      test_pool.py
 @contact:   georgewang1994@163.com
-@desc:      测试协程池
+@desc:      测试协程池、进程池
 """
 
-# import asyncio
-import time
-#
-# from ammonia.backends.worker.pool import AsyncPool
+from ammonia.backends.backend import DbBackend
+from ammonia.base.task import TaskManager
+from ammonia.settings import TEST_CASE_BACKEND_URL
+from ammonia.tests.test_base import ammonia, TestDBBackendBase
+from ammonia.worker.pool import ProcessPool
 
 
-def result_executor(i):
-    print("%s: 等待1s" % i)
-    time.sleep(1)
-    return i
+@ammonia.task()
+def get_sum(a, b):
+    return a + b
 
 
-def success_executor(i):
-    print("success", i)
+class TestSchedule(TestDBBackendBase):
+    """
+    测试定时任务
+    """
+    def setUp(self):
+        super(TestSchedule, self).setUp()
+        self.pool = ProcessPool(worker_count=4)
+        self.pool.start()
+        self.backend = DbBackend(TEST_CASE_BACKEND_URL)
 
+    def test_pool(self):
+        # 设置执行的参数
+        get_sum.base_process_task(1, 2)
 
-def fail_executor(i):
-    print("fail", i)
+        exe_result = TaskManager.execute_task(self.pool, get_sum.data)
+        self.assertEqual(exe_result, (True, 3))
 
-#
-# async def run():
-#     async with AsyncPool(worker_count=10) as pool:
-#         for i in range(50):
-#             await pool.apply_async(result_executor, success_executor, fail_executor, i)
-#
-#
-# result_queue = asyncio.Queue()
-# loop = asyncio.get_event_loop()
-# loop.run_until_complete(run())
-
-
-import asyncio
-
-from ammonia.worker.pool import AsyncPool
-
-
-async def run():
-    async with AsyncPool(10, loop) as pool:
-        for i in range(50):
-            await pool.apply_async(result_executor, success_executor, fail_executor, i)
-
-loop = asyncio.get_event_loop()
-
-loop.run_until_complete(run())
+        result = self.backend.get_task_result(get_sum.task_id)
+        self.assertEqual(result, (True, 3))

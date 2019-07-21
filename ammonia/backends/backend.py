@@ -193,10 +193,13 @@ class MQBackend(BaseBackend):
 
         result = result[0]
         status = result["status"]
-        if status == TaskStatusEnum.FAIL.value:
-            return True, result["traceback"]
+        if status not in [TaskStatusEnum.SUCCESS.value, TaskStatusEnum.FAIL.value, TaskStatusEnum.RETRY.value]:
+            return False, None
 
-        return True, result["result"]
+        if status == TaskStatusEnum.SUCCESS.value:
+            return True, result["result"]
+
+        return True, result["traceback"]
 
 
 class DbBackend(BaseBackend):
@@ -270,7 +273,7 @@ class DbBackend(BaseBackend):
         if not task_id:
             return False
 
-        return self._save_task(task_id=task_id, status=TaskStatusEnum.RETRY.value, result=result)
+        return self._save_task(task_id=task_id, status=TaskStatusEnum.RETRY.value, traceback=result)
 
     def mark_task_success(self, task_id, result=None):
         if not task_id:
@@ -289,10 +292,13 @@ class DbBackend(BaseBackend):
         if not task:
             return False, None
 
-        if task.status == TaskStatusEnum.FAIL.value:
-            return True, task.traceback
+        if task.status not in [TaskStatusEnum.SUCCESS.value, TaskStatusEnum.FAIL.value, TaskStatusEnum.RETRY.value]:
+            return False, None
 
-        return True, task.result
+        if task.status == TaskStatusEnum.SUCCESS.value:
+            return True, task.result
+
+        return True, task.traceback
 
     def get_task_result(self, task_id, timeout=None):
         if not task_id:
@@ -354,7 +360,7 @@ class RedisBackend(BaseBackend):
         if not task_id:
             return False
 
-        return self._save_task(task_id=task_id, status=TaskStatusEnum.RETRY.value, result=result)
+        return self._save_task(task_id=task_id, status=TaskStatusEnum.RETRY.value, traceback=result)
 
     def mark_task_success(self, task_id, result=None):
         """
