@@ -10,14 +10,21 @@
 """
 
 
+import datetime
+
 from .ammonia import ammonia
 
 
-@ammonia.task()
-def get_sum(a, b):
+@ammonia.task(eta=datetime.datetime.now() + datetime.timedelta(seconds=10))
+def get_abc(a, b):
     return a + b
 
 
-@ammonia.task(wait=5)
-def get_sum2(a, b):
+@ammonia.task(wait=datetime.timedelta(seconds=5))
+def get_abc2(a, b):
+    return a + b
+
+
+@ammonia.task()
+def get_abc3(a, b):
     return a + b

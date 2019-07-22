@@ -10,6 +10,7 @@
 """
 
 import datetime
+import logging
 import sys
 from collections import Iterable
 
@@ -20,6 +21,8 @@ from ammonia.mq import TaskProducer, TaskConnection, task_exchange, task_queues
 from ammonia.state import TaskStatusEnum
 from ammonia.utils import generate_random_routing_key
 from ammonia.utils import generate_random_uid
+
+logger = logging.getLogger(__name__)
 
 
 class Crontab(object):
@@ -119,7 +122,7 @@ class ExecuteBaseTask(object):
         with TaskConnection(hostname=Ammonia.conf["TASK_URL"],
                             connect_timeout=Ammonia.conf["TASK_CONNECTION_TIMEOUT"]) as conn:
             routing_key = self.task.routing_key
-            print("发送消息给路由%s %s" % (routing_key, self.data))
+            logger.debug("发送消息给路由%s %s" % (routing_key, self.data))
             producer = self.get_task_producer(channel=conn, routing_key=routing_key)
             producer.publish_task(self.data, routing_key=routing_key,
                                   exchange=task_exchange, declare=task_queues)
@@ -247,10 +250,12 @@ class TaskPackage(ExecuteBaseTask):
         :return:
         """
         if not self.task_list:
-            raise Exception("任务包中的任务为空")
+            logging.error("任务包中的任务为空")
+            return
 
         if len(self.task_list) <= 1:
-            raise Exception("任务包中任务个数至少为两个")
+            logging.error("任务包中任务个数至少为两个")
+            return
 
         # 如果是直接调用，则直接计算返回
         if is_immediate:
@@ -356,17 +361,17 @@ class TaskManager(object):
 
     @classmethod
     def execute_task(cls, pool, task_kwargs, message):
-        print("开始处理任务 task_kwargs: task_kwargs" % task_kwargs)
+        logging.debug("开始处理任务 task_kwargs: task_kwargs" % task_kwargs)
         pool.apply_async(task_trace_execute, cls.on_task_success, cls.on_task_fail, task_kwargs)
         message.ack()
 
     @classmethod
     def on_task_success(cls, return_value):
-        print("任务执行成功，返回结果为%s" % return_value)
+        logging.debug("任务执行成功，返回结果为%s" % return_value)
 
     @classmethod
     def on_task_fail(cls, return_value):
-        print("任务执行失败，返回结果为%s" % return_value)
+        logging.debug("任务执行失败，返回结果为%s" % return_value)
 
 
 class BaseTrace(object):
@@ -379,7 +384,7 @@ class BaseTrace(object):
         raise NotImplemented
 
     def execute(self, *args, **kwargs):
-        print("任务开始执行 task: %s, args: %s, kwargs: %s" % (self.task_or_package, args, kwargs))
+        logging.debug("任务开始执行 task: %s, args: %s, kwargs: %s" % (self.task_or_package, args, kwargs))
         retry_num = self.task_or_package.task.retry
         result = None
 
@@ -395,10 +400,10 @@ class BaseTrace(object):
             success, result = self._execute(*args, **kwargs)
             if success:
                 self.do_exec_success(result)
-                print("任务[%s]执行成功, 结果为[%s]" % (self.task_or_package, result))
+                logging.info("任务[%s]执行成功, 结果为[%s]" % (self.task_or_package, result))
                 return True, result
             else:
-                print("任务[%s]执行失败, 结果为[%s]" % (self.task_or_package, result))
+                logging.info("任务[%s]执行失败, 结果为[%s]" % (self.task_or_package, result))
 
         # 记录到数据库中
         if retry_num:

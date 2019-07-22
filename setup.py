@@ -25,7 +25,7 @@ tests_requirements = [
 
 setup(
     name="Ammonia",
-    version="0.0.16",
+    version="0.0.17",
     description="task queue",
     author="george wang",
     author_email="georgewang1994@163.com",

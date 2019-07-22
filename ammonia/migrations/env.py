@@ -19,7 +19,6 @@ fileConfig(config.config_file_name)
 # target_metadata = mymodel.Base.metadata
 import sys
 from os.path import abspath, dirname
-print(dirname(dirname(abspath(__file__))))
 sys.path.append(dirname(dirname(dirname(abspath(__file__)))))
 
 from ammonia.backends.models import Base

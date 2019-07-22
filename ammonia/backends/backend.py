@@ -20,12 +20,16 @@ from ammonia import settings
 from ammonia.backends.models import Task
 from ammonia.mq import BackendConnection, BackendConsumer, BackendProducer
 from ammonia.state import TaskStatusEnum
+import logging
 
 # 队列名字
 QUEUE_NAME = "backend_queue"
 
 # 交换器名字
 EXCHANGE_NAME = "backend_exchange"
+
+
+logger = logging.getLogger(__name__)
 
 
 class BaseBackend(object):
@@ -165,7 +169,6 @@ class MQBackend(BaseBackend):
         result = []  # 利用可变数据记录结果
 
         def process_task_callback(body, message):
-            print("task_content %s" % body)
             message.ack()
             result.append(body)
 

@@ -9,11 +9,14 @@
 @desc:      跑测试用例
 """
 
+import logging
 import sys
 import unittest
 from argparse import ArgumentParser
 
 from ammonia import tests
+
+logger = logging.getLogger(__name__)
 
 
 def collect_tests():
@@ -37,9 +40,9 @@ if __name__ == "__main__":
     tests = collect_tests()
     failures, errors = run_tests(tests, args.verbosity)
     if failures:
-        print('-' * 20 + 'failures' + '-' * 20)
-        print(failures)
+        logger.info('-' * 20 + 'failures' + '-' * 20)
+        logging.info(failures)
 
     if errors:
-        print('-' * 20 + 'errors' + '-' * 20)
-        print(errors)
+        logging.info('-' * 20 + 'errors' + '-' * 20)
+        logging.info(errors)

@@ -73,22 +73,22 @@ class TaskListener(object):
         :return:
         """
         task_consumer = TaskConsumerWorker(self._connection, self.handle_task_message)
-        print("TaskListener: 获取消息中...")
+        logger.info("TaskListener: 获取消息中...")
         try:
             task_consumer.run()
         except KeyboardInterrupt:
-            print("TaskListener: bye bye")
+            logger.info("TaskListener: bye bye")
             self.stop()
 
     def handle_task_message(self, body, message):
-        print("TaskListener: 获取到消息%s" % body)
+        logger.info("TaskListener: 获取到消息%s" % body)
         eta = body.get("eta", None)
         wait = body.get("wait", None)
         if eta or wait:
-            print("TaskListener: register time task")
+            logging.debug("TaskListener: register time task")
             self.schedule.register_task(body, message)
         else:
-            print("TaskListener: register now task")
+            logging.debug("TaskListener: register now task")
             self.ready_queue.put((body, message))
 
 
@@ -107,19 +107,18 @@ class TaskQueueListener(threading.Thread):
         消费消息
         :return:
         """
-        print("TaskQueueListener: task queue listener start...")
         logging.info("TaskQueueListener: task queue listener start...")
         while True:
             try:
                 task_msg, message = self.ready_queue.get()
                 if task_msg:
-                    print("TaskQueueListener: 获取到消息%s" % task_msg)
+                    logging.debug("TaskQueueListener: 获取到消息%s" % task_msg)
                     self.ready_queue.task_done()
                     TaskManager.execute_task(self.pool, task_msg, message)
             except Empty:
                 time.sleep(1)
             except KeyboardInterrupt:
-                print("TaskQueueListener: bye bye")
+                logging.info("TaskQueueListener: bye bye")
 
     def stop(self):
         self.join()

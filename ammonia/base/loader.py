@@ -10,10 +10,13 @@
 """
 
 import importlib
+import logging
 import os
 import pkgutil
 import sys
 from contextlib import contextmanager
+
+logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -91,7 +94,7 @@ class Loader(BaseLoader):
         """
         task_list = cls.get_tasks_from_dictionary(project_name)
         if not task_list:
-            print("在指定的项目【%s】中没有找到任务的任务模块" % project_name)
+            logger.error("在指定的项目【%s】中没有找到任务的任务模块" % project_name)
             return []
 
         mod_list = []
@@ -102,7 +105,7 @@ class Loader(BaseLoader):
                     mod = importlib.import_module("%s.%s" % (project_name, task_module))
                     mod_list.append(mod)
                 except ModuleNotFoundError:
-                    print("无法从项目【%s】中导入任务模块【%s】" % (project_name, task_module))
-                    raise
+                    logging.error("无法从项目【%s】中导入任务模块【%s】" % (project_name, task_module))
+                    continue
 
         return mod_list

@@ -9,6 +9,7 @@
 @desc:      worker
 """
 
+import logging
 from argparse import ArgumentParser
 
 from ammonia.base.loader import Loader
@@ -17,6 +18,9 @@ from ammonia.worker.controller import WorkerController
 
 # 命令提示信息
 USAGE_MSG = "python --worker 10(worker count) --project example(your_project_name)"
+
+
+logger = logging.getLogger(__name__)
 
 
 def parse_options(arguments):
@@ -45,7 +49,7 @@ class Worker(object):
     def setup(self):
         self.loader.on_worker_start(self.project_name)
         task_list = task_registry.values()
-        print(START_UP_MSG.format(tasks=task_list))
+        logger.info(START_UP_MSG.format(tasks=task_list))
 
     def run(self):
         try:
