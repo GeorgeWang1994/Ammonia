@@ -18,9 +18,14 @@ requirements = [
     'redis==3.2.1',
 ]
 
+
+tests_requirements = [
+    'freezegun==0.3.12',
+]
+
 setup(
     name="Ammonia",
-    version="0.0.15",
+    version="0.0.16",
     description="task queue",
     author="george wang",
     author_email="georgewang1994@163.com",
@@ -34,7 +39,14 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
     ],
+    test_suite='runtests.collect_tests',
+    tests_require=tests_requirements,
     entry_points={
         'console_scripts': [
             'ammonia=ammonia.command.start:start',

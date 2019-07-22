@@ -24,6 +24,12 @@ from ammonia.backends.models import Base
 ammonia = Ammonia(conf={"BACKEND_URL": settings.TEST_CASE_BACKEND_URL})
 
 
+class MQMessage(object):
+
+    def ack(self):
+        return True
+
+
 class TestDBBackendBase(TestCase):
     def setUp(self):
         with contextlib.suppress(sqlalchemy_exc.ProgrammingError):

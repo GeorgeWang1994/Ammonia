@@ -43,8 +43,7 @@ class Worker(object):
         self.loader = Loader()
 
     def setup(self):
-        result = self.loader.on_worker_start(self.project_name)
-        print("fund task modules: %s" % result)
+        self.loader.on_worker_start(self.project_name)
         task_list = task_registry.values()
         print(START_UP_MSG.format(tasks=task_list))
 

@@ -12,7 +12,7 @@
 from ammonia.backends.backend import DbBackend
 from ammonia.base.task import TaskManager
 from ammonia.settings import TEST_CASE_BACKEND_URL
-from ammonia.tests.test_base import ammonia, TestDBBackendBase
+from ammonia.tests.test_base import ammonia, TestDBBackendBase, MQMessage
 from ammonia.worker.pool import ProcessPool
 
 
@@ -28,15 +28,14 @@ class TestSchedule(TestDBBackendBase):
     def setUp(self):
         super(TestSchedule, self).setUp()
         self.pool = ProcessPool(worker_count=4)
-        self.pool.start()
         self.backend = DbBackend(TEST_CASE_BACKEND_URL)
 
     def test_pool(self):
+        self.pool.start()
         # 设置执行的参数
         get_sum.base_process_task(1, 2)
 
-        exe_result = TaskManager.execute_task(self.pool, get_sum.data)
-        self.assertEqual(exe_result, (True, 3))
-
+        TaskManager.execute_task(self.pool, get_sum.data, MQMessage())
+        self.pool.stop()
         result = self.backend.get_task_result(get_sum.task_id)
         self.assertEqual(result, (True, 3))

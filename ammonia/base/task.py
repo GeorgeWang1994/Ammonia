@@ -355,10 +355,10 @@ class TaskManager(object):
         return exe_cls(task_name, **task_kwargs)
 
     @classmethod
-    def execute_task(cls, pool, task_kwargs):
+    def execute_task(cls, pool, task_kwargs, message):
         print("开始处理任务 task_kwargs: task_kwargs" % task_kwargs)
-        return pool.apply_async(task_trace_execute, cls.on_task_success, cls.on_task_fail, task_kwargs)
-        # todo: 将消息的消费放到执行任务的后面，保证消息在中间过程中因为不可抗原因而导致消失
+        pool.apply_async(task_trace_execute, cls.on_task_success, cls.on_task_fail, task_kwargs)
+        message.ack()
 
     @classmethod
     def on_task_success(cls, return_value):

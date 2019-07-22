@@ -13,7 +13,7 @@ from queue import Queue
 
 from freezegun import freeze_time
 
-from ammonia.tests.test_base import ammonia, TestDBBackendBase
+from ammonia.tests.test_base import ammonia, TestDBBackendBase, MQMessage
 from ammonia.worker.schedule import Schedule
 
 
@@ -43,15 +43,15 @@ class TestSchedule(TestDBBackendBase):
             self.assertIsNotNone(get_sum.start_time)
             self.assertEqual(result.get(), 3)
             # 为了方便计算，重新对任务的开始时间进行了赋值
-            self.schedule.register_task(get_sum.data)
-            result, next_internal_time = self.schedule.get_need_execute_task(start_time.timestamp())
-            self.assertEqual(result["task_id"], get_sum.task_id)
+            self.schedule.register_task(get_sum.data, MQMessage())
+            task_body, _, next_internal_time = self.schedule.get_need_execute_task(start_time.timestamp())
+            self.assertEqual(task_body["task_id"], get_sum.task_id)
             self.assertIsNone(next_internal_time)
 
-            result, next_internal_time = self.schedule.get_need_execute_task(
+            task_body, _, next_internal_time = self.schedule.get_need_execute_task(
                 start_time.timestamp() + 1
             )
-            self.assertIsNone(result)
+            self.assertIsNone(task_body)
             self.assertIsNone(next_internal_time)
 
     def test_schedule_for_wait(self):
@@ -61,13 +61,13 @@ class TestSchedule(TestDBBackendBase):
             self.assertIsNotNone(get_sum2.start_time)
             self.assertEqual(result.get(), 3)
             # 为了方便计算，重新对任务的开始时间进行了赋值
-            self.schedule.register_task(get_sum2.data)
-            result, next_internal_time = self.schedule.get_need_execute_task(start_time.timestamp())
-            self.assertEqual(result["task_id"], get_sum2.task_id)
+            self.schedule.register_task(get_sum2.data, MQMessage())
+            task_body, _, next_internal_time = self.schedule.get_need_execute_task(start_time.timestamp())
+            self.assertEqual(task_body["task_id"], get_sum2.task_id)
             self.assertIsNone(next_internal_time)
 
-            result, next_internal_time = self.schedule.get_need_execute_task(
+            task_body, _, next_internal_time = self.schedule.get_need_execute_task(
                 start_time.timestamp() + 1
             )
-            self.assertIsNone(result)
+            self.assertIsNone(task_body)
             self.assertIsNone(next_internal_time)

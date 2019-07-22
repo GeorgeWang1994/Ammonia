@@ -86,11 +86,10 @@ class TaskListener(object):
         wait = body.get("wait", None)
         if eta or wait:
             print("TaskListener: register time task")
-            self.schedule.register_task(body)
+            self.schedule.register_task(body, message)
         else:
             print("TaskListener: register now task")
-            self.ready_queue.put(body)
-        message.ack()
+            self.ready_queue.put((body, message))
 
 
 class TaskQueueListener(threading.Thread):
@@ -112,11 +111,11 @@ class TaskQueueListener(threading.Thread):
         logging.info("TaskQueueListener: task queue listener start...")
         while True:
             try:
-                task_msg = self.ready_queue.get()
+                task_msg, message = self.ready_queue.get()
                 if task_msg:
                     print("TaskQueueListener: 获取到消息%s" % task_msg)
                     self.ready_queue.task_done()
-                    TaskManager.execute_task(self.pool, task_msg)
+                    TaskManager.execute_task(self.pool, task_msg, message)
             except Empty:
                 time.sleep(1)
             except KeyboardInterrupt:
