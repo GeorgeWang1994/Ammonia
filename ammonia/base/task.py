@@ -18,9 +18,9 @@ from ammonia.backends.backend import get_backend_by_settings
 from ammonia.base.registry import task_registry
 from ammonia.base.result import AsyncResult
 from ammonia.mq import TaskProducer, TaskConnection, task_exchange, task_queues
+from ammonia.signals import task_prepare, task_process, task_fail, task_success, task_retry
 from ammonia.state import TaskStatusEnum
-from ammonia.utils import generate_random_routing_key
-from ammonia.utils import generate_random_uid
+from ammonia.utils.shortcut import generate_random_routing_key, generate_random_uid
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +154,8 @@ class ExecuteBaseTask(object):
         self.execute_args = args
         self.execute_kwargs = kwargs
         self.status = TaskStatusEnum.PREPARE.value
+        task_prepare.send(sender=self.task.task_name, task_id=self.task_id, task_name=self.task.task_name,
+                          exe_args=self.execute_args, exe_kwargs=self.execute_kwargs)
 
 
 class Task(ExecuteBaseTask):
@@ -385,7 +387,10 @@ class BaseTrace(object):
 
     def execute(self, *args, **kwargs):
         logging.debug("任务开始执行 task: %s, args: %s, kwargs: %s" % (self.task_or_package, args, kwargs))
+        self.task_or_package.status = TaskStatusEnum.PROCESS.value
         retry_num = self.task_or_package.task.retry
+        task_process.send(sender=self.task_or_package.task.task_name, task_id=self.task_id, task_name=self.task_or_package.task.task_name,
+                          exe_args=self.task_or_package.execute_args, exe_kwargs=self.task_or_package.execute_kwargs)
         result = None
 
         tmp_retry_num = retry_num
@@ -412,20 +417,23 @@ class BaseTrace(object):
             self.do_exec_fail(result)
         return False, None
 
-    def do_exec_func(self, *args, **kwargs):
-        raise NotImplemented
-
     def do_exec_success(self, return_value):
         self.task_or_package.status = TaskStatusEnum.SUCCESS.value
         self.task_or_package.backend.mark_task_success(task_id=self.task_id, result=return_value)
+        task_success.send(sender=self.task_or_package.task.task_name, task_id=self.task_id, task_name=self.task_or_package.task.task_name,
+                          exe_args=self.task_or_package.execute_args, exe_kwargs=self.task_or_package.execute_kwargs)
 
     def do_exec_fail(self, return_value):
         self.task_or_package.status = TaskStatusEnum.FAIL.value
         self.task_or_package.backend.mark_task_fail(task_id=self.task_id, result=return_value)
+        task_fail.send(sender=self.task_or_package.task.task_name, task_id=self.task_id, task_name=self.task_or_package.task.task_name,
+                       exe_args=self.task_or_package.execute_args, exe_kwargs=self.task_or_package.execute_kwargs)
 
     def do_exec_retry(self, return_value):
         self.task_or_package.status = TaskStatusEnum.RETRY.value
         self.task_or_package.backend.mark_task_retry(task_id=self.task_id, result=return_value)
+        task_retry.send(sender=self.task_or_package.task.task_name, task_id=self.task_id, task_name=self.task_or_package.task.task_name,
+                        exe_args=self.task_or_package.execute_args, exe_kwargs=self.task_or_package.execute_kwargs)
 
 
 class TaskTrace(BaseTrace):
@@ -441,7 +449,6 @@ class TaskTrace(BaseTrace):
             return False, error
 
     def do_exec_func(self, *args, **kwargs):
-        self.task_or_package.status = TaskStatusEnum.PROCESS.value
         self.result = self.task_or_package.execute(*args, **kwargs)
         return self.result
 
@@ -477,7 +484,6 @@ class TaskPackageTrace(BaseTrace):
         return True, result
 
     def do_exec_func(self, task, *args):
-        self.task_or_package.status = TaskStatusEnum.PROCESS.value
         self.result = task.execute(*args)
         return self.result
 

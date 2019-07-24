@@ -37,12 +37,12 @@ class Signal(object):
 
     def __init__(self, name=None, must_args=None, *args, **kwargs):
         self.name = name or random_str()
-        self.must_args = must_args or {}
+        self.must_args = must_args or ()
         self.id_2_receiver_dict = defaultdict(dict)
         self.default_sender = "default_sender"
 
     def __repr__(self):
-        return f"signal:{self.name}"
+        return f"signal:{self.name}&args:{self.must_args}"
 
     def connect(self, receiver, sender=None, receiver_id=None):
         if not receiver and not receiver_id:
@@ -90,11 +90,16 @@ class Signal(object):
 
             receiver_dict[receiver_id]()(sender, *args, **kwargs)
         else:
+            must_args = []
             for _, receiver in receiver_dict.items():
-                receiver()(sender, *args, **kwargs)
+                for key in self.must_args:
+                    if key not in kwargs:
+                        raise Exception("请检查必要参数%s" % key)
 
+                    must_args.append(kwargs.pop(key))
 
-subscribe_course = Signal("subscribe_course")
+                arg_list = list(must_args) + list(args)
+                receiver()(sender, *arg_list, **kwargs)
 
 
 def receiver(signals, sender, receiver_id=None):

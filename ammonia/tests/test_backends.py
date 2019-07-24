@@ -15,7 +15,7 @@ from ammonia.backends.backend import DbBackend, RedisBackend
 from ammonia.backends.models import TaskStatusEnum
 from ammonia.settings import TEST_CASE_BACKEND_URL
 from ammonia.tests.test_base import TestDBBackendBase
-from ammonia.utils import generate_random_uid
+from ammonia.utils.shortcut import generate_random_uid
 
 
 class TestDbBackend(TestDBBackendBase):

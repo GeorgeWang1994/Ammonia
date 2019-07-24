@@ -11,6 +11,7 @@
 
 from queue import Queue
 
+from ammonia.signals import worker_start, worker_stop
 from ammonia.worker.listener import TaskListener, TaskQueueListener
 from ammonia.worker.pool import ProcessPool
 from ammonia.worker.schedule import Schedule
@@ -38,6 +39,10 @@ class WorkerController(object):
         for worker in self.workers:
             worker.start()
 
+        worker_start.send(self)
+
     def stop(self):
         for worker in reversed(self.workers):
             worker.stop()
+
+        worker_stop.send(self)
