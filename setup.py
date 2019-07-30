@@ -1,5 +1,7 @@
 from setuptools import setup, find_packages
 
+__VERSION__ = "0.0.17"
+
 requirements = [
     'alembic==1.0.10',
     'amqp==2.4.2',
@@ -25,7 +27,7 @@ tests_requirements = [
 
 setup(
     name="Ammonia",
-    version="0.0.17",
+    version=__VERSION__,
     description="task queue",
     author="george wang",
     author_email="georgewang1994@163.com",

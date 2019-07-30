@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  ammonia:
+
+    image: ammonia/ammonia:latest
+    environment:
+      REDIS_HOST: redis
+      TEST_TASK_URL: amqp://guest:guest@localhost:5672//
+      TEST_BACKEND_URL: redis://ammonia
+
+  redis:
+    image: redis:5.0.5
+
+  rabbitmq:
+    image: rabbitmq:3.7.16
