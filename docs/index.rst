@@ -5,7 +5,7 @@
 
 介绍
 ========================
-简单任务对列
+简单任务对列，相关文档地址为：https://ammonia-doc.readthedocs.io/en/latest/#
 
 
 目录
