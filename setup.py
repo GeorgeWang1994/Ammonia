@@ -17,7 +17,7 @@ requirements = [
     'Tempita==0.5.2',
     'vine==1.3.0',
     'PyMySQL==0.9.3',
-    'redis==3.2.1',
+    'redis==4.5.3',
 ]
 
 
