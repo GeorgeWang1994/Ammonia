@@ -13,7 +13,7 @@ requirements = [
     'six==1.12.0',
     'SQLAlchemy==1.3.3',
     'SQLAlchemy-Utils==0.34.0',
-    'sqlparse==0.3.0',
+    'sqlparse==0.4.4',
     'Tempita==0.5.2',
     'vine==1.3.0',
     'PyMySQL==0.9.3',
